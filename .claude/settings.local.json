@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "Bash(grep -E '\\\\.\\(js|html|json|css\\)$|^d')",
+      "WebFetch(domain:kaesve.nl)",
+      "Bash(grep -o 'ddF=\\([^\\)]*=>[^,]*{[^}]*}')",
+      "Bash(perl -ne 'print $1 if /const ddF=\\(.+?\\)\\(?=const|,ddF|,oe\\)/; print $1 if /const oe=\\(.+?\\)\\(?=const|},|;\\)/')",
+      "Bash(node -e \":*)"
     ]
   }
 }

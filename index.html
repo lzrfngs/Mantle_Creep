@@ -1,598 +1,823 @@
 <!DOCTYPE html>
-<!--
-  Murakami Pattern Generator
-  ──────────────────────────
-  Inspired by A.A. Murakami's "A Thousand Layers of Stomach" and the
-  pigmentation patterns of the Asari clam (Ruditapes philippinarum).
-
-  Technique: Meinhardt activator-inhibitor-substrate reaction-diffusion.
-  A 1D array of cells represents the mollusc's mantle edge. Each timestep
-  advances the chemistry using coupled PDEs and writes one row of pixels.
-  The 2D image accumulates top-to-bottom — identical to how the shell itself
-  deposits pigment during growth. Chevron patterns emerge from lateral
-  travelling waves along the simulated mantle edge.
-
-  Equations (forward Euler, wrapped boundary):
-    da = dt * ( c·a²·s/h  −  μa·a  +  Da·∇²a  +  ρ  )
-    dh = dt * ( c·a²·s    −  μh·h  +  Dh·∇²h        )
-    ds = dt * ( ρs         −  a²·s  −  μs·s          )
-
-  Reference: Meinhardt, H. (1995). The Algorithmic Beauty of Sea Shells.
-
-  Stack: vanilla JS + Canvas 2D API. No libraries.
--->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MURAKAMI</title>
+<title>Mantle Creep</title>
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; background: #0c0c0c; overflow: hidden; }
-
-body {
-  display: flex;
-  font-family: 'IBM Plex Mono', ui-monospace, 'Courier New', monospace;
-  font-size: 11px;
-  letter-spacing: 0.07em;
-  color: #888;
-}
-
-#app { display: flex; width: 100%; height: 100%; }
-
-#panel {
-  width: 220px;
-  min-width: 220px;
-  background: #111;
-  border-right: 1px solid #1c1c1c;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: none;
-}
-#panel::-webkit-scrollbar { display: none; }
-
-.panel-title {
-  padding: 16px 14px 12px;
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  color: #555;
-  border-bottom: 1px solid #1a1a1a;
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
-
-.section {
-  padding: 10px 14px;
-  border-bottom: 1px solid #1a1a1a;
-  flex-shrink: 0;
-}
-
-.section-label {
-  font-size: 9px;
-  letter-spacing: 0.2em;
-  color: #555;
-  text-transform: uppercase;
-  margin-bottom: 10px;
-}
-
-.slider-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 8px;
-}
-.slider-row:last-child { margin-bottom: 0; }
-
-.slider-label {
-  width: 76px;
-  min-width: 76px;
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  color: #666;
-  text-transform: uppercase;
-}
-
-input[type="range"] {
-  -webkit-appearance: none;
-  flex: 1;
-  min-width: 0;
-  height: 1px;
-  background: #282828;
-  outline: none;
-  border: none;
-  cursor: pointer;
-  border-radius: 0;
-}
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 9px; height: 9px;
-  background: #666;
-  border-radius: 0;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-input[type="range"]::-webkit-slider-thumb:hover,
-input[type="range"]:hover::-webkit-slider-thumb { background: #ccc; }
-input[type="range"]::-moz-range-thumb {
-  width: 9px; height: 9px;
-  background: #666; border-radius: 0; border: none; cursor: pointer;
-}
-
-.slider-val {
-  width: 36px;
-  text-align: right;
-  font-size: 9px;
-  color: #555;
-  flex-shrink: 0;
-}
-
-.toggle-row {
-  display: flex; align-items: center; gap: 8px;
-  cursor: pointer; user-select: none; margin-bottom: 8px;
-}
-.toggle-row:last-child { margin-bottom: 0; }
-.dot {
-  width: 5px; height: 5px;
-  border: 1px solid #333; border-radius: 50%;
-  flex-shrink: 0; transition: background 0.1s, border-color 0.1s;
-}
-.toggle-row.on .dot { background: #aaa; border-color: #aaa; }
-.toggle-label { font-size: 9px; letter-spacing: 0.1em; color: #666; text-transform: uppercase; }
-.toggle-row.on .toggle-label { color: #bbb; }
-
-.colour-pickers {
-  display: flex; gap: 10px;
-  margin-top: 8px;
-  opacity: 0.2; pointer-events: none; transition: opacity 0.2s;
-}
-.colour-pickers.on { opacity: 1; pointer-events: all; }
-
-.swatch-group { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
-.swatch-label { font-size: 8px; letter-spacing: 0.15em; color: #444; text-transform: uppercase; }
-input[type="color"] {
-  -webkit-appearance: none;
-  width: 34px; height: 20px;
-  border: 1px solid #282828; padding: 1px;
-  background: #181818; cursor: pointer; border-radius: 0;
-}
-input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-input[type="color"]::-webkit-color-swatch { border: none; }
-
-.btn {
-  display: block; width: 100%;
-  padding: 9px 0;
-  background: none; border: 1px solid #222;
-  color: #666; font-family: inherit; font-size: 9px;
-  letter-spacing: 0.2em; text-transform: uppercase;
-  cursor: pointer; transition: border-color 0.15s, color 0.15s;
-  margin-bottom: 6px;
-}
-.btn:last-child { margin-bottom: 0; }
-.btn:hover { border-color: #555; color: #bbb; }
-.btn:active { background: #161616; }
-.btn.accent { border-color: #2a2a2a; color: #777; }
-.btn.accent:hover { border-color: #888; color: #eee; }
-
-#canvas-container {
-  flex: 1; display: flex;
-  align-items: center; justify-content: center;
-  background: #0c0c0c;
-}
-#glcanvas {
-  display: block;
-  max-width: min(calc(100vw - 220px - 40px), calc(100vh - 40px));
-  max-height: min(calc(100vw - 220px - 40px), calc(100vh - 40px));
-  width: 100%; aspect-ratio: 1 / 1;
-}
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=EB+Garamond:ital,wght@0,400;1,400&display=swap');
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root { --bg:#0e0e0e; --panel:#131313; --border:#222; --text:#777; --dim:#333; --accent:#999; }
+  body {
+    background:var(--bg); color:var(--text);
+    font-family:'IBM Plex Mono',monospace; font-size:11px;
+    height:100vh; overflow:hidden;
+    display:flex; flex-direction:column; align-items:center;
+    padding:14px 20px 12px; gap:10px;
+  }
+  header { width:100%; max-width:1040px; flex-shrink:0; display:flex; justify-content:space-between; align-items:baseline; }
+  header h1 { font-family:'Playfair Display',serif; font-size:14px; font-weight:400; font-style:italic; letter-spacing:0.01em; text-transform:none; color:var(--accent); }
+  header span { font-size:9px; color:var(--dim); }
+  #swatch-wrap { position:relative; width:100%; max-width:1040px; flex:1; min-height:0; }
+  canvas { display:block; width:100%; height:100%; border:1px solid var(--border); }
+  #overlay {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(14,14,14,0.85); font-size:9px; letter-spacing:0.15em;
+    color:var(--dim); text-transform:uppercase; pointer-events:none; transition:opacity 0.25s;
+  }
+  #overlay.hidden { opacity:0; }
+  #controls {
+    width:100%; max-width:1040px; flex-shrink:0;
+    display:grid; grid-template-columns:repeat(4,1fr);
+    gap:1px; background:var(--border); border:1px solid var(--border);
+  }
+  .ctrl { background:var(--panel); padding:8px 12px; display:flex; flex-direction:column; gap:5px; }
+  .ctrl-row { display:flex; justify-content:space-between; align-items:baseline; }
+  .ctrl-name { font-size:9px; letter-spacing:0.05em; color:var(--text); }
+  .ctrl-val  { font-size:9px; color:var(--accent); min-width:36px; text-align:right; }
+  input[type=range] { -webkit-appearance:none; width:100%; height:1px; background:var(--border); outline:none; cursor:pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:7px; height:7px; background:var(--accent); border-radius:0; cursor:pointer; }
+  #bottom { width:100%; max-width:1040px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; }
+  #palettes { display:flex; gap:4px; align-items:center; }
+  .swatch { width:20px; height:14px; border:1px solid var(--border); cursor:pointer; transition:border-color 0.12s; position:relative; overflow:hidden; }
+  .swatch.active { border-color:var(--accent); }
+  .swatch:hover  { border-color:#555; }
+  .swatch .sw-l { position:absolute; left:0; top:0; width:50%; height:100%; }
+  .swatch .sw-r { position:absolute; right:0; top:0; width:50%; height:100%; }
+  button { background:none; border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:9px; letter-spacing:0.1em; text-transform:uppercase; padding:6px 12px; cursor:pointer; transition:border-color 0.12s,color 0.12s; }
+  button:hover { border-color:var(--accent); color:var(--accent); }
+  button.active { border-color:var(--accent); color:var(--accent); }
+  #presets { display:flex; gap:4px; align-items:center; }
+  #status { font-size:9px; color:var(--dim); }
+  /* info modal */
+  #info-modal {
+    display:none; position:fixed; inset:0; z-index:100;
+    background:rgba(14,14,14,0.92); align-items:center; justify-content:center;
+  }
+  #info-modal.open { display:flex; }
+  #info-box {
+    max-width:520px; width:90%; background:var(--panel); border:1px solid var(--border);
+    padding:28px 32px 24px; position:relative;
+  }
+  #info-box h2 { font-family:'Playfair Display',serif; font-size:18px; font-weight:400; font-style:italic; letter-spacing:0.01em; text-transform:none; color:var(--accent); margin-bottom:18px; }
+  #info-box p  { font-family:'EB Garamond',serif; font-size:13px; line-height:1.8; color:var(--text); margin-bottom:12px; }
+  #info-box p:last-child { margin-bottom:0; color:var(--dim); font-size:12px; }
+  #info-close { position:absolute; top:12px; right:14px; background:none; border:none; color:var(--dim); font-family:inherit; font-size:14px; cursor:pointer; line-height:1; padding:0; }
+  #info-close:hover { color:var(--accent); }
+  #btn-info { font-size:9px; }
+  #info-box em { color:var(--accent); font-style:italic; }
+  /* per-control tooltips */
+  .ctrl { position:relative; }
+  .ctrl-tip {
+    display:none; position:absolute; bottom:calc(100% + 5px); left:0;
+    width:230px; background:var(--panel); border:1px solid var(--border);
+    padding:9px 11px; font-size:9px; line-height:1.6; color:var(--text);
+    z-index:30; pointer-events:none;
+  }
+  .ctrl:hover .ctrl-tip { display:block; }
+  .swatch.inverted::after {
+    content:''; position:absolute; bottom:2px; right:2px;
+    width:3px; height:3px; background:var(--accent); border-radius:50%;
+  }
 </style>
 </head>
 <body>
-<div id="app">
-  <aside id="panel">
-    <div class="panel-title">Murakami</div>
-  </aside>
-  <main id="canvas-container">
-    <canvas id="glcanvas"></canvas>
-  </main>
+
+<header>
+  <h1>Mantle Creep</h1>
+  <span>Meinhardt · reaction-diffusion</span>
+  <button id="btn-info">info</button>
+</header>
+
+<div id="info-modal">
+  <div id="info-box">
+    <button id="info-close">×</button>
+    <h2>Mantle Creep</h2>
+    <p>The outer surface of a mollusc shell is a space-time diagram. Each row records the chemistry of the growing edge at one moment in the animal's life. The mantle — a thin sheet of tissue at the shell margin — secretes new mineral and pigment simultaneously. What determines where pigment falls is a lateral chemical reaction: an <em>activator</em> that self-amplifies locally, paired with a faster-spreading <em>inhibitor</em> that suppresses it everywhere else. No template. No instruction. The pattern is a consequence of diffusion rates.</p>
+    <p>Hans Meinhardt spent three decades at the Max Planck Institute translating shell photographs into differential equations. His 1995 book <em>The Algorithmic Beauty of Sea Shells</em> showed that the same activator-inhibitor architecture — with different diffusion ratios, feedback terms, and source densities — produces the full range of natural shell markings. A small change in inhibitor decay time shifts a pattern from discrete chevrons to continuous waves. The parameters are everything.</p>
+    <p><em>sp51a</em> — Diamond lattice chevrons. Activator-substrate-inhibitor crossing. Seen on Ruditapes philippinarum (Asari clam), various Natica and Conus species, and in A.A. Murakami's textile installation A Thousand Layers of Stomach. <em>sp512</em> — Teardrops. Activator with secondary additive inhibitor. The inverted-heart formation typical of Oliva and Marginella. Organic, heavy, almost calligraphic.</p>
+    <p>Based on H. Meinhardt, <em>The Algorithmic Beauty of Sea Shells</em> (Springer, 4th ed.). Parameters verified from kaesve.nl and C. Viau's Observable notebook. Hover any slider to see the biological process it models.</p>
+  </div>
+</div>
+
+<div id="swatch-wrap">
+  <canvas id="c"></canvas>
+  <div id="overlay">Computing…</div>
+</div>
+
+<div id="controls">
+  <div class="ctrl">
+    <div class="ctrl-row"><span class="ctrl-name">Mantle Width</span><span class="ctrl-val" id="v-N">150</span></div>
+    <input type="range" id="s-N" min="50" max="600" step="10" value="150">
+    <span class="ctrl-tip">How many chemical cells span the mantle's growing edge. More cells resolve finer pattern structure. The mantle is the thin tissue at the shell margin that deposits both mineral and pigment simultaneously.</span>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-row"><span class="ctrl-name">Growth Interval</span><span class="ctrl-val" id="v-ST">100</span></div>
+    <input type="range" id="s-ST" min="5" max="200" step="5" value="100">
+    <span class="ctrl-tip">Reaction steps computed between each new shell layer. A slow-growing shell lets the activator-inhibitor dynamic fully resolve before the next layer is deposited. Fast growth compresses patterns vertically.</span>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-row"><span class="ctrl-name">Tidal Bleed</span><span class="ctrl-val" id="v-BL">0.50</span></div>
+    <input type="range" id="s-BL" min="0" max="8.0" step="0.1" value="0.5">
+    <span class="ctrl-tip">Lateral diffusion of the activator signal along the growing edge. Mimics pigment molecules bleeding into adjacent mantle tissue. Higher values soften stripe boundaries and widen the transition zone.</span>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-row"><span class="ctrl-name">Substrate Irregularity</span><span class="ctrl-val" id="v-RO">0.00</span></div>
+    <input type="range" id="s-RO" min="0" max="1.0" step="0.02" value="0.0">
+    <span class="ctrl-tip">Fractal variation in local activation threshold across the shell matrix. Real shells have uneven mineral composition — some cells are more or less sensitive to the activator signal, causing ragged biological edges.</span>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-row"><span class="ctrl-name">Pigment Memory</span><span class="ctrl-val" id="v-PS">0.95</span></div>
+    <input type="range" id="s-PS" min="0" max="0.95" step="0.01" value="0.95">
+    <span class="ctrl-tip">Temporal integration of the activator signal. Pigment cells carry chemical memory of recent hormone exposure — a cell that was active a few timesteps ago continues depositing ink. Creates soft trailing edges where stripes dissolve over time.</span>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-row"><span class="ctrl-name">Turbulence</span><span class="ctrl-val" id="v-TU">0.00</span></div>
+    <input type="range" id="s-TU" min="0" max="2.0" step="0.02" value="0.0">
+    <span class="ctrl-tip">Spatial displacement driven by environmental noise. Temperature gradients, water movement, and physical disturbance at the growing edge perturb the stripe pattern, causing deflections and local disorder.</span>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-row"><span class="ctrl-name">Drift</span><span class="ctrl-val" id="v-DR">0.00</span></div>
+    <input type="range" id="s-DR" min="0" max="1.0" step="0.02" value="0.0">
+    <span class="ctrl-tip">Systematic lateral offset accumulated over growth time. Models a persistent tidal current that sweeps the chemical gradient sideways as the shell grows, tilting stripes at a progressive angle.</span>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-row"><span class="ctrl-name">Pigment Intensity</span><span class="ctrl-val" id="v-GA">1.65</span></div>
+    <input type="range" id="s-GA" min="0.1" max="2.5" step="0.05" value="1.65">
+    <span class="ctrl-tip">Concentration-response curve of the pigment cells. Controls how steeply ink density rises with activator concentration — whether a small chemical change causes a sharp jump in color or a gradual build.</span>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-row"><span class="ctrl-name">Activation Threshold</span><span class="ctrl-val" id="v-TH">0.46</span></div>
+    <input type="range" id="s-TH" min="0.0" max="0.9" step="0.02" value="0.46">
+    <span class="ctrl-tip">Minimum activator concentration required to trigger pigment synthesis. Below this level the mantle cell produces no ink — bare shell. Controls how much of the surface is unpigmented versus marked.</span>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-row"><span class="ctrl-name">Shore Roughness</span><span class="ctrl-val" id="v-GR">0.35</span></div>
+    <input type="range" id="s-GR" min="0" max="1.0" step="0.01" value="0.35">
+    <span class="ctrl-tip">Microscale surface texture of the shell's prismatic layer. Each species has a characteristic grain from its mineral microstructure. Concentrated at pigment transition zones where the texture reads as organic variation.</span>
+  </div>
+</div>
+
+<div id="bottom">
+  <div id="palettes"></div>
+  <button id="btn-invert">Invert</button>
+  <div id="presets">
+    <button id="btn-sp51a" class="active">sp51a ◆</button>
+    <button id="btn-sp512">sp512 ♥</button>
+  </div>
+  <span id="status"></span>
+  <button id="btn-save">⬇ Save PNG</button>
 </div>
 
 <script>
-'use strict';
+// ── PALETTES ──────────────────────────────────────────────────────────────
+const PALETTES = [
+  {
+    name:'ivory',
+    bg:   [10,8,5],
+    dark: [20,14,6],
+    mid:  [185,135,55],
+    light:[228,210,172],
+  },
+  {
+    name:'amber',
+    bg:   [8,5,2],
+    dark: [10,5,2],
+    mid:  [210,95,15],
+    light:[235,195,140],
+  },
+  {
+    name:'ink',
+    bg:   [238,232,220],
+    dark: [8,6,4],
+    mid:  [60,45,90],
+    light:[238,232,220],
+  },
+  {
+    name:'jade',
+    bg:   [4,10,6],
+    dark: [3,8,5],
+    mid:  [30,160,100],
+    light:[180,225,195],
+  },
+  {
+    name:'rust',
+    bg:   [9,4,2],
+    dark: [8,3,1],
+    mid:  [210,60,20],
+    light:[230,185,155],
+  },
+  {
+    name:'lavender',
+    bg:   [8,7,14],
+    dark: [55,15,90],
+    mid:  [175,130,230],
+    light:[210,200,240],
+  },
+  {
+    name:'sepia',
+    bg:   [12,9,5],
+    dark: [14,9,4],
+    mid:  [150,100,45],
+    light:[210,190,155],
+  },
+  {
+    name:'glacier',
+    bg:   [5,8,12],
+    dark: [10,40,80],
+    mid:  [80,185,210],
+    light:[195,220,235],
+  },
+];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SIMULATION — Meinhardt activator-inhibitor-substrate reaction-diffusion
-//
-// Three chemical species on the mollusc mantle edge:
-//   a[i] — activator  (autocatalytic; high where pigment is deposited)
-//   h[i] — inhibitor  (activated by a, suppresses a at range)
-//   s[i] — substrate  (consumed by production; local depletion drives complexity)
-//
-// Equations (forward Euler, wrapped boundary):
-//   prod = a²·s / (h · (1 + 0.1·a²))   ← saturation term prevents blowup
-//   na   = a + dt·( Da·∇²a  +  c·prod  −  μa·a  +  ρa )
-//   nh   = h + dt·( Dh·∇²h  +  c·a²·s  −  μh·h        )
-//   ns   = s + dt·( ρs      −  c·a²·s  −  μs·s         )
-//
-// The substrate s is what produces the complex reference behaviour. As it
-// depletes locally, stripes thin, merge, and bifurcate. rho_s controls how
-// quickly it replenishes: lower = more chaotic, higher = cleaner stripes.
-//
-// Reference: Meinhardt, H. (1995). The Algorithmic Beauty of Sea Shells.
-// ─────────────────────────────────────────────────────────────────────────────
-class SimRunner {
-  constructor(canvas) {
-    this.displayCanvas = canvas;
-    this.dctx = canvas.getContext('2d');
+// Warm paper white used as background for inverted palettes
+const PAPER = [248, 245, 240];
+// Per-palette invert state (persists when switching palettes)
+const invertStates = new Array(PALETTES.length).fill(false);
+invertStates[2] = true; // ink palette inverted on load
 
-    this.SIZE = 1024; // width of simulation = width and height of output image
+let paletteIdx=2;
+const palRow=document.getElementById('palettes');
+PALETTES.forEach((p,i)=>{
+  const sw=document.createElement('div');
+  sw.className='swatch'+(i===paletteIdx?' active':'');
+  sw.title=p.name;
+  const l=document.createElement('div'); l.className='sw-l';
+  l.style.background=`rgb(${p.light.join(',')})`;
+  const r=document.createElement('div'); r.className='sw-r';
+  r.style.background=`rgb(${p.mid.join(',')})`;
+  sw.appendChild(l); sw.appendChild(r);
+  sw.addEventListener('click',()=>{
+    document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active'));
+    sw.classList.add('active'); paletteIdx=i; syncInvertButton(); render();
+  });
+  palRow.appendChild(sw);
+});
 
-    // Offscreen canvas accumulates rows (never cleared until reset)
-    this.offscreen        = document.createElement('canvas');
-    this.offscreen.width  = this.SIZE;
-    this.offscreen.height = this.SIZE;
-    this.octx = this.offscreen.getContext('2d');
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const overlay=document.getElementById('overlay');
 
-    // Double-buffered Float64 arrays — three chemical species
-    this.a  = new Float64Array(this.SIZE);
-    this.h  = new Float64Array(this.SIZE);
-    this.s  = new Float64Array(this.SIZE);
-    this.na = new Float64Array(this.SIZE); // scratch buffers for next state
-    this.nh = new Float64Array(this.SIZE);
-    this.ns = new Float64Array(this.SIZE);
+// Simulation cache — raw activator grid, reused when only render params change.
+// Sim params: PR, N, ST, BL, BO, TU, DR + canvas CSS size.
+// Render-only params (no resim needed): GA, TH, GR, palette, invert.
+let _rawCache = null, _rawSimKey = '';
+let _roughCache = null, _roughSizeKey = '';
 
-    // Reusable ImageData for writing one row at a time
-    this.rowBuf = this.octx.createImageData(this.SIZE, 1);
+// ── ANIMATION STATE ──────────────────────────────────────────────────────
+// The animation loop reuses the last render's perturbedRaw + LUT —
+// no resimulation. Only the horizontal warp phase advances each frame.
+let _animRaf    = null;
+let _animPhase  = 0;
+let _animBase   = null; // pre-blur rendered image, updated each render
+let _animBgCss  = 'rgb(0,0,0)';
+let _animIW     = 0, _animIH = 0;
+let _animBlur   = 0;
+let _animOff    = null;
 
-    // ── User-controllable parameters ─────────────────────────────────────────
-    this.Da        = 0.0025; // activator diffusion
-    this.Dh        = 0.1;    // inhibitor diffusion (must exceed Da)
-    this.rho_s     = 0.15;   // substrate replenishment rate
-    this.threshold = 1.2;    // display cutoff: a > threshold → foreground color
-    this.speed     = 4;      // rows computed per animation frame (1–20)
+function setCanvasSize(){
+  const wrap=document.getElementById('swatch-wrap');
+  const dpr=window.devicePixelRatio||1;
+  const cssW=Math.max(200,wrap.clientWidth);
+  const cssH=Math.max(80,wrap.clientHeight);
+  canvas.width=Math.round(cssW*dpr);
+  canvas.height=Math.round(cssH*dpr);
+  canvas.style.width=cssW+'px';
+  canvas.style.height=cssH+'px';
+}
 
-    // ── Fixed kinetic parameters ──────────────────────────────────────────────
-    this.c     = 0.01;
-    this.mu_a  = 0.003;
-    this.mu_h  = 0.004;
-    this.rho_a = 0.0002;
-    this.mu_s  = 0.0;
-    this.dt    = 0.5;
+// ── Value / fractal noise ─────────────────────────────────────────────────
+function makeVNoise(size,seed){
+  const t=new Float32Array(size); let s=seed>>>0;
+  for(let i=0;i<size;i++){s=(s*1664525+1013904223)>>>0;t[i]=(s/0xffffffff)*2-1;}
+  return x=>{
+    const xi=Math.floor(x)&(size-1); const xf=x-Math.floor(x);
+    const sm=xf*xf*(3-2*xf);
+    return t[xi]*(1-sm)+t[(xi+1)&(size-1)]*sm;
+  };
+}
+function makeFractal(seed,oct=4){
+  const ns=Array.from({length:oct},(_,i)=>makeVNoise(512,seed+i*997));
+  return (x,lac=2,gain=0.5)=>{
+    let v=0,amp=1,freq=1,tot=0;
+    for(let o=0;o<oct;o++){v+=ns[o](x*freq)*amp;tot+=amp;amp*=gain;freq*=lac;}
+    return v/tot;
+  };
+}
 
-    // ── Display colors (RGB byte triples) ─────────────────────────────────────
-    this.colorBG = [13, 13, 13];      // below threshold — dark background
-    this.colorFG = [237, 232, 224];   // above threshold — warm light marks
+// ── 1D Gaussian blur ──────────────────────────────────────────────────────
+function blurRow(src,sigma){
+  if(sigma<0.3) return src;
+  const N=src.length, r=Math.ceil(sigma*2.8);
+  const k=new Float64Array(2*r+1); let sum=0;
+  for(let i=-r;i<=r;i++){const w=Math.exp(-i*i/(2*sigma*sigma));k[i+r]=w;sum+=w;}
+  for(let i=0;i<k.length;i++) k[i]/=sum;
+  const out=new Float32Array(N);
+  for(let i=0;i<N;i++){let v=0;for(let j=0;j<k.length;j++)v+=src[(i+j-r+N)%N]*k[j];out[i]=v;}
+  return out;
+}
 
-    this.running    = true;
-    this.currentRow = 0;
-
-    this._reset();
-    this._resize();
-    window.addEventListener('resize', () => this._resize());
+// ── MEINHARDT SIMULATION ──────────────────────────────────────────────────
+// Ported from kaesve.nl's proven implementation.
+// ddFInto: 1D discrete Laplacian (L + R - 2*center).
+// wrap=false → zero-flux (Neumann) boundary: out-of-bounds cells mirror the edge.
+// This is kaesve's default (gc() returns wrap:false).
+function ddFInto(arr, out, n, wrap) {
+  for (let i = 0; i < n; i++) {
+    const L = arr[wrap ? (i-1+n)%n : (i > 0 ? i-1 : 0)];
+    const R = arr[wrap ? (i+1)%n   : (i < n-1 ? i+1 : n-1)];
+    out[i] = L + R - 2*arr[i];
   }
+}
 
-  // ── Resize display canvas to fit container ───────────────────────────────
-  _resize() {
-    const c = this.displayCanvas.parentElement;
-    const s = Math.min(c.clientWidth, c.clientHeight) - 24;
-    this.displayCanvas.width  = s;
-    this.displayCanvas.height = s;
-    this._draw(); // redraw from offscreen after backing-store clear
+// KE=51: Activator-substrate-inhibitorC crossing (sp51a — diamond lattice)
+// Equations from kaesve.nl function sc().
+// prod = s * substrate * (a² + ba) / (1 + sa*a²) / (sb + sc*inhibitorC)
+// dA = prod - ra*a + Da*∇²a
+// dB = bb - prod - rb*substrate + Db*∇²substrate    (substrate clamped ≥ 0)
+// dC = rc*(a - inhibitorC) + Dc*∇²inhibitorC
+function stepKE51(a, b, c, s, Da, ra, ba, sa, Db, rb, bb, sb, Dc, rc, sc_p, wrap, n, dA, dB, dC, nA, nB, nC) {
+  ddFInto(a, dA, n, wrap);
+  ddFInto(b, dB, n, wrap);
+  ddFInto(c, dC, n, wrap);
+  for (let i = 0; i < n; i++) {
+    const ai=a[i], bi=b[i], ci=c[i];
+    const prod = s[i] * bi * (ai*ai + ba) / (1 + sa*ai*ai) / (sb + sc_p*ci);
+    nA[i] = prod - ra*ai + Da*dA[i];
+    nB[i] = bb - prod - rb*bi + Db*dB[i];
+    nC[i] = rc*(ai - ci) + Dc*dC[i];
   }
+  for (let i = 0; i < n; i++) {
+    a[i] = Math.max(0, a[i] + nA[i]);
+    b[i] = Math.max(0, b[i] + nB[i]);
+    c[i] += nC[i];
+  }
+}
 
-  // ── Initialise state arrays and clear offscreen canvas ───────────────────
-  _reset() {
-    const N = this.SIZE;
-    const a = this.a, h = this.h, s = this.s;
+// KE=54: Activator-inhibitorB-inhibitorC additive crossing (sp512 — teardrops)
+// Equations from kaesve.nl function lc().
+// prod = s * (a² + ba) / (sb*inhibitorB + sc*inhibitorC)
+// dA = prod - ra*a + Da*∇²a
+// dB = rb*(a² - inhibitorB) + Db*∇²inhibitorB + bb
+// dC = rc*(a - inhibitorC) + Dc*∇²inhibitorC
+function stepKE54(a, b, c, s, Da, ra, ba, Db, rb, bb, sb, Dc, rc, sc_p, wrap, n, dA, dB, dC, nA, nB, nC) {
+  ddFInto(a, dA, n, wrap);
+  ddFInto(b, dB, n, wrap);
+  ddFInto(c, dC, n, wrap);
+  for (let i = 0; i < n; i++) {
+    const ai=a[i], bi=b[i], ci=c[i];
+    const denom = Math.max(1e-8, sb*bi + sc_p*ci);
+    nA[i] = s[i] * (ai*ai + ba) / denom - ra*ai + Da*dA[i];
+    nB[i] = rb*(ai*ai - bi) + Db*dB[i] + bb;
+    nC[i] = rc*(ai - ci) + Dc*dC[i];
+  }
+  for (let i = 0; i < n; i++) {
+    a[i] = Math.max(0, a[i] + nA[i]);
+    b[i] += nB[i];
+    c[i] += nC[i];
+  }
+}
 
-    for (let i = 0; i < N; i++) {
-      a[i] = 1.0 + (Math.random() * 2 - 1) * 0.1;
-      h[i] = 1.0 + (Math.random() * 2 - 1) * 0.05;
-      s[i] = 1.0;
+// ── SIMULATE ──────────────────────────────────────────────────────────────
+// Returns Float32Array of length IH*IW (activator values, row-major).
+// Simulation runs N cells wide × IH rows tall, then stretches to IW on output.
+function simulate(IW, IH, params) {
+  const { BL, BO, TU, DR } = params;
+  const N = Math.max(50, Math.round(params.N));
+  const stepCount = Math.max(5, Math.round(params.ST));
+  const wrap = false; // zero-flux boundaries (kaesve default)
+
+  // Preset chemistry parameters (verified from kaesve.nl source)
+  const PRESETS = [
+    { // sp51a — diamond lattice chevrons (KE=51)
+      ke:51,
+      Da:0.005, ra:0.01, ba:0,    sa:0,
+      Db:0.4,   rb:0,    bb:0.015, sb:1,
+      Dc:0,     rc:0.001,          sc:1,
+      s:0.01,
+      // Homogeneous equilibrium: a* = bb/ra = 1.5, b* = ra/(s*a*) ≈ 0.667
+      // Init at equilibrium + small noise so Turing instability fills whole canvas.
+      initA_eq:1.5,  initA_noise:0.08,
+      initB_eq:0.667, initB_noise:0.03,
+      initC_eq:0.0,
+    },
+    { // sp512 — teardrops (KE=54)
+      ke:54,
+      Da:0.01, ra:0.01, ba:0.08,
+      Db:0.005, rb:0.0015, bb:0, sb:0.1,
+      Dc:0.4,  rc:0.015,          sc:1,
+      s:0.01,
+      // Equilibrium: a*≈0.928, inhibB*=a²≈0.861, inhibC*=a≈0.928
+      initA_eq:0.928, initA_noise:0.05,
+      initB_eq:0.861, initB_noise:0.02,
+      initC_eq:0.928,
     }
+  ];
 
-    this.currentRow = 0;
-    const [r, g, b] = this.colorBG;
-    this.octx.fillStyle = `rgb(${r},${g},${b})`;
-    this.octx.fillRect(0, 0, N, N);
+  const p = PRESETS[params.PR] || PRESETS[0];
+
+  // Deterministic LCG noise for reproducible organic variation
+  let _lcg = 0xABCD1234;
+  const lcgNoise = () => { _lcg = (_lcg * 1664525 + 1013904223) >>> 0; return (_lcg / 0xFFFFFFFF) * 2 - 1; };
+
+  // State arrays (persist across all rows — continuous simulation)
+  const act = new Float64Array(N);
+  const st_b = new Float64Array(N);
+  const st_c = new Float64Array(N);
+
+  // Initialise at homogeneous equilibrium + small noise so Turing instability
+  // operates across the full canvas from row 1, not just at sparse seed positions.
+  for (let i = 0; i < N; i++) {
+    act[i]  = p.initA_eq  + lcgNoise() * p.initA_noise;
+    st_b[i] = p.initB_eq  + lcgNoise() * p.initB_noise;
+    st_c[i] = p.initC_eq;
   }
 
-  // ── Advance simulation one row and write pixels ───────────────────────────
-  _step() {
-    const N = this.SIZE;
-    const { Da, Dh, c, mu_a, mu_h, rho_a, rho_s, mu_s, dt, threshold } = this;
-    const a = this.a, h = this.h, s = this.s;
-    const na = this.na, nh = this.nh, ns = this.ns;
-    const rd = this.rowBuf.data;
-    const [bgR, bgG, bgB] = this.colorBG;
-    const [fgR, fgG, fgB] = this.colorFG;
+  // Source density (uniform)
+  const s_arr = new Float64Array(N).fill(p.s);
 
-    for (let i = 0; i < N; i++) {
-      const L = i === 0     ? N - 1 : i - 1;
-      const R = i === N - 1 ? 0     : i + 1;
+  // Scratch arrays (pre-allocated to avoid GC pressure in inner loop)
+  const dA = new Float64Array(N);
+  const dB = new Float64Array(N);
+  const dC = new Float64Array(N);
+  const nA = new Float64Array(N);
+  const nB = new Float64Array(N);
+  const nC = new Float64Array(N);
 
-      const ai = a[i], hi = h[i], si = s[i];
-      const lapA = a[L] - 2*ai + a[R];
-      const lapH = h[L] - 2*hi + h[R];
+  const { Da, ra, ba, sa, Db, rb, bb, sb, Dc, rc, sc } = p;
 
-      // Saturating autocatalysis — the (1 + 0.1·a²) denominator caps production
-      // when activator is high, preventing blowup while preserving Turing instability
-      const prod = ai * ai * si / (hi * (1 + 0.1 * ai * ai));
-
-      na[i] = ai + dt * (Da * lapA + c * prod - mu_a * ai + rho_a);
-      nh[i] = hi + dt * (Dh * lapH + c * ai * ai * si - mu_h * hi);
-      ns[i] = si + dt * (rho_s - c * ai * ai * si - mu_s * si);
-
-      na[i] = Math.max(0.001, Math.min(10, na[i]));
-      nh[i] = Math.max(0.001, Math.min(10, nh[i]));
-      ns[i] = Math.max(0,     Math.min(5,  ns[i]));
-    }
-
-    // Write this row to the ImageData buffer
-    for (let i = 0; i < N; i++) {
-      const px = i << 2;
-      if (na[i] > threshold) {
-        rd[px] = fgR; rd[px+1] = fgG; rd[px+2] = fgB;
+  // Row-by-row simulation: each canvas row = one time slice
+  const simRows = [];
+  for (let row = 0; row < IH; row++) {
+    for (let step = 0; step < stepCount; step++) {
+      if (p.ke === 51) {
+        stepKE51(act, st_b, st_c, s_arr, Da, ra, ba, sa, Db, rb, bb, sb, Dc, rc, sc, wrap, N, dA, dB, dC, nA, nB, nC);
       } else {
-        rd[px] = bgR; rd[px+1] = bgG; rd[px+2] = bgB;
+        stepKE54(act, st_b, st_c, s_arr, Da, ra, ba, Db, rb, bb, sb, Dc, rc, sc, wrap, N, dA, dB, dC, nA, nB, nC);
       }
-      rd[px+3] = 255;
     }
-    this.octx.putImageData(this.rowBuf, 0, this.currentRow);
-
-    // Swap buffers — no allocation
-    [this.a, this.na] = [this.na, this.a];
-    [this.h, this.nh] = [this.nh, this.h];
-    [this.s, this.ns] = [this.ns, this.s];
-
-    this.currentRow++;
-    if (this.currentRow >= this.SIZE) this._reset();
+    let rowData = new Float32Array(N);
+    for (let i = 0; i < N; i++) rowData[i] = act[i];
+    if (BL > 0.3) rowData = blurRow(rowData, BL * 1.6);
+    simRows.push(rowData);
   }
 
-  // ── Scale offscreen to display canvas ────────────────────────────────────
-  _draw() {
-    this.dctx.drawImage(
-      this.offscreen,
-      0, 0, this.displayCanvas.width, this.displayCanvas.height
-    );
-  }
-
-  // ── Animation tick: advance `speed` rows then redraw ─────────────────────
-  tick() {
-    if (this.running) {
-      for (let i = 0; i < this.speed; i++) this._step();
-    }
-    this._draw();
-  }
-
-  // ── Public controls ───────────────────────────────────────────────────────
-  newSeed() {
-    this._reset();
-  }
-
-  // Set a named parameter directly on this object (all params are top-level props)
-  setParam(key, value) {
-    this[key] = value;
-  }
-
-  // Update display colors. If enabled, use picker hex values; else revert to defaults.
-  setColor(enabled, hexA, hexB) {
-    if (!enabled) {
-      this.colorBG = [13, 13, 13];
-      this.colorFG = [237, 232, 224];
-    } else {
-      if (hexA) this.colorBG = this._hexToRgb(hexA);
-      if (hexB) this.colorFG = this._hexToRgb(hexB);
+  // Bloom
+  if (BO > 0.05) {
+    for (let r = 0; r < simRows.length; r++) {
+      const bl = blurRow(simRows[r], BO * 9);
+      const out = new Float32Array(N);
+      for (let i = 0; i < N; i++) out[i] = simRows[r][i] + bl[i]*BO*0.9;
+      simRows[r] = out;
     }
   }
 
-  _hexToRgb(hex) {
-    return [
-      parseInt(hex.slice(1, 3), 16),
-      parseInt(hex.slice(3, 5), 16),
-      parseInt(hex.slice(5, 7), 16),
-    ];
+  // Scatter to output: stretch N→IW, apply turbulence + drift warp
+  const turbField  = TU > 0 ? makeFractal(3141) : null;
+  const driftField = DR > 0 ? makeFractal(2718) : null;
+  const turbAmp  = TU * 50;
+  const driftAmp = DR * N * 0.18;
+
+  const raw = new Float32Array(IH * IW);
+  for (let x = 0; x < IW; x++) {
+    const simXBase = (x / IW) * N;
+    for (let y = 0; y < IH; y++) {
+      let warpY = 0;
+      if (TU > 0 && turbField) warpY = turbField(simXBase/N*5 + y*0.011) * turbAmp;
+      let warpX = 0;
+      if (DR > 0 && driftField) warpX = driftField(y * 0.007) * driftAmp;
+
+      const sx = ((simXBase + warpX) % N + N) % N;
+      const sxi = Math.floor(sx) % N;
+      const sxf = sx - Math.floor(sx);
+
+      // Bilinear: interpolate between adjacent sim rows (handles warp sub-row offsets)
+      const ry  = Math.min(simRows.length-1, Math.max(0, y + warpY));
+      const ry0 = Math.floor(ry);
+      const ry1 = Math.min(simRows.length-1, ry0+1);
+      const ryf = ry - ry0;
+      const v0  = simRows[ry0][sxi]*(1-sxf) + simRows[ry0][(sxi+1)%N]*sxf;
+      const v1  = simRows[ry1][sxi]*(1-sxf) + simRows[ry1][(sxi+1)%N]*sxf;
+      raw[y*IW+x] = v0*(1-ryf) + v1*ryf;
+    }
   }
 
-  // Export the current 1024×1024 offscreen canvas as PNG
-  exportPNG() {
-    const link = document.createElement('a');
-    link.download = 'murakami-' + Date.now() + '.png';
-    link.href = this.offscreen.toDataURL('image/png');
-    link.click();
-  }
+  return raw;
 }
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-// UI
-// ─────────────────────────────────────────────────────────────────────────────
-class UI {
-  constructor(panel, sim) {
-    this.panel        = panel;
-    this.sim          = sim;
-    this.colorEnabled = false;
-    this._build();
+// ── COLOUR: pigment concentration gradient ────────────────────────────────
+// Four-stop mapping: t=0 is background (no pigment), t=1 is deepest pigment.
+// This models ink/dye: the activator peak deposits full pigment, the wave
+// edges hold dilute tint, and below the floor value the surface is bare.
+// Stop distribution: bg→light covers the fade-in zone (dilute edges),
+// light→mid covers the main stripe body, mid→dark covers the dense core.
+function paletteSample(t,pal){
+  // Ease: flat start/end with steepest slope at mid — opens up midtones
+  const e = t<0.5 ? 2*t*t : 1-2*(1-t)*(1-t);
+  let r,g,b;
+  if(e<0.28){
+    // bg → light: pigment barely present, fading stripe edges
+    const f=e/0.28;
+    r=pal.bg[0]+(pal.light[0]-pal.bg[0])*f;
+    g=pal.bg[1]+(pal.light[1]-pal.bg[1])*f;
+    b=pal.bg[2]+(pal.light[2]-pal.bg[2])*f;
+  } else if(e<0.62){
+    // light → mid: dilute-to-moderate pigment in the stripe body
+    const f=(e-0.28)/0.34;
+    r=pal.light[0]+(pal.mid[0]-pal.light[0])*f;
+    g=pal.light[1]+(pal.mid[1]-pal.light[1])*f;
+    b=pal.light[2]+(pal.mid[2]-pal.light[2])*f;
+  } else {
+    // mid → dark: full pigment concentration at the activator peak
+    const f=(e-0.62)/0.38;
+    r=pal.mid[0]+(pal.dark[0]-pal.mid[0])*f;
+    g=pal.mid[1]+(pal.dark[1]-pal.mid[1])*f;
+    b=pal.mid[2]+(pal.dark[2]-pal.mid[2])*f;
   }
-
-  _build() {
-    this._buildSimulation();
-    this._buildColor();
-    this._buildButtons();
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  _section(label) {
-    const sec = document.createElement('div');
-    sec.className = 'section';
-    if (label) {
-      const l = document.createElement('div');
-      l.className = 'section-label';
-      l.textContent = label;
-      sec.appendChild(l);
-    }
-    this.panel.appendChild(sec);
-    return sec;
-  }
-
-  // fmt(n): formats the display value. onChange(n): called on slider input.
-  _slider(container, label, min, max, step, val, onChange, fmt) {
-    const row = document.createElement('div');
-    row.className = 'slider-row';
-
-    const l = document.createElement('div');
-    l.className = 'slider-label';
-    l.textContent = label;
-
-    const inp = document.createElement('input');
-    inp.type = 'range';
-    inp.min = min; inp.max = max; inp.step = step; inp.value = val;
-
-    const v = document.createElement('div');
-    v.className = 'slider-val';
-    v.textContent = fmt(parseFloat(val));
-
-    inp.addEventListener('input', () => {
-      const n = parseFloat(inp.value);
-      v.textContent = fmt(n);
-      onChange(n);
-    });
-
-    row.appendChild(l); row.appendChild(inp); row.appendChild(v);
-    container.appendChild(row);
-    return inp;
-  }
-
-  _toggle(container, label, initial, onChange) {
-    const row = document.createElement('div');
-    row.className = 'toggle-row' + (initial ? ' on' : '');
-    const d = document.createElement('div'); d.className = 'dot';
-    const l = document.createElement('div'); l.className = 'toggle-label'; l.textContent = label;
-    row.appendChild(d); row.appendChild(l);
-    let state = initial;
-    row.addEventListener('click', () => {
-      state = !state;
-      row.classList.toggle('on', state);
-      onChange(state);
-    });
-    container.appendChild(row);
-  }
-
-  // ── Simulation section ────────────────────────────────────────────────────
-  _buildSimulation() {
-    const sec = this._section('Simulation');
-
-    // Da — activator diffusion. Lower = finer, denser stripes.
-    this._slider(sec, 'Da', 0.001, 0.008, 0.0001, 0.0025,
-      v => this.sim.setParam('Da', v),
-      v => v.toFixed(4)
-    );
-
-    // Dh — inhibitor diffusion. Must exceed Da for Turing instability.
-    this._slider(sec, 'Dh', 0.05, 0.3, 0.005, 0.1,
-      v => this.sim.setParam('Dh', v),
-      v => v.toFixed(3)
-    );
-
-    // Substrate — replenishment rate of s. Lower = more chaotic, irregular stripes.
-    // Higher = cleaner, more regular stripes.
-    this._slider(sec, 'Substrate', 0.05, 0.4, 0.005, 0.15,
-      v => this.sim.setParam('rho_s', v),
-      v => v.toFixed(3)
-    );
-
-    // Threshold — display cutoff on activator concentration.
-    this._slider(sec, 'Threshold', 0.8, 2.5, 0.05, 1.2,
-      v => this.sim.setParam('threshold', v),
-      v => v.toFixed(2)
-    );
-
-    // Speed — rows computed per frame.
-    this._slider(sec, 'Speed', 1, 20, 1, 4,
-      v => this.sim.setParam('speed', v),
-      v => String(Math.round(v))
-    );
-  }
-
-  // ── Colour section ────────────────────────────────────────────────────────
-  _buildColor() {
-    const sec = this._section('Colour');
-
-    const toggle = document.createElement('div');
-    toggle.className = 'toggle-row';
-    const d = document.createElement('div'); d.className = 'dot';
-    const l = document.createElement('div'); l.className = 'toggle-label'; l.textContent = 'Enable';
-    toggle.appendChild(d); toggle.appendChild(l);
-
-    const pickers = document.createElement('div');
-    pickers.className = 'colour-pickers';
-
-    const bgGroup = document.createElement('div'); bgGroup.className = 'swatch-group';
-    bgGroup.innerHTML = '<div class="swatch-label">BG</div>';
-    this.pickerA = document.createElement('input');
-    this.pickerA.type = 'color'; this.pickerA.value = '#0d0d0d';
-    bgGroup.appendChild(this.pickerA);
-
-    const fgGroup = document.createElement('div'); fgGroup.className = 'swatch-group';
-    fgGroup.innerHTML = '<div class="swatch-label">FG</div>';
-    this.pickerB = document.createElement('input');
-    this.pickerB.type = 'color'; this.pickerB.value = '#ede8e0';
-    fgGroup.appendChild(this.pickerB);
-
-    pickers.appendChild(bgGroup); pickers.appendChild(fgGroup);
-
-    toggle.addEventListener('click', () => {
-      this.colorEnabled = !this.colorEnabled;
-      toggle.classList.toggle('on', this.colorEnabled);
-      pickers.classList.toggle('on', this.colorEnabled);
-      this.sim.setColor(this.colorEnabled, this.pickerA.value, this.pickerB.value);
-    });
-
-    const update = () => {
-      if (this.colorEnabled) this.sim.setColor(true, this.pickerA.value, this.pickerB.value);
-    };
-    this.pickerA.addEventListener('input', update);
-    this.pickerB.addEventListener('input', update);
-
-    sec.appendChild(toggle); sec.appendChild(pickers);
-  }
-
-  // ── Buttons ───────────────────────────────────────────────────────────────
-  _buildButtons() {
-    const sec = this._section(null);
-
-    const pause = document.createElement('button');
-    pause.className = 'btn';
-    pause.textContent = 'Pause / Resume';
-    pause.addEventListener('click', () => { this.sim.running = !this.sim.running; });
-
-    const seed = document.createElement('button');
-    seed.className = 'btn';
-    seed.textContent = 'New Seed';
-    seed.addEventListener('click', () => this.sim.newSeed());
-
-    const exp = document.createElement('button');
-    exp.className = 'btn accent';
-    exp.textContent = 'Export PNG';
-    exp.addEventListener('click', () => this.sim.exportPNG());
-
-    sec.appendChild(pause); sec.appendChild(seed); sec.appendChild(exp);
-  }
+  return [Math.round(r),Math.round(g),Math.round(b)];
 }
 
+// ── RENDER ────────────────────────────────────────────────────────────────
+// Simulation runs at CSS resolution (simW×simH) regardless of DPR.
+// The render loop bilinearly upscales to physical (IW×IH) — cheaper than
+// running the full simulation at 2× or 4× the pixel count.
+// A 256-entry color LUT eliminates Math.pow from the hot pixel loop.
+let renderTimeout=null;
+function render(){
+  clearTimeout(renderTimeout);
+  // Stop any running animation — will be restarted once this render completes
+  if(_animRaf){cancelAnimationFrame(_animRaf);_animRaf=null;}
+  overlay.classList.remove('hidden');
+  document.getElementById('status').textContent='';
+  renderTimeout=setTimeout(()=>{
+    requestAnimationFrame(()=>{
+      setCanvasSize();
+      const dpr=window.devicePixelRatio||1;
+      const IW=canvas.width, IH=canvas.height;         // physical draw buffer
+      const simW=Math.round(IW/dpr);                   // CSS / simulation width
+      const simH=Math.round(IH/dpr);                   // CSS / simulation height
+      const params=readParams();
 
-// ─────────────────────────────────────────────────────────────────────────────
-// INIT
-// ─────────────────────────────────────────────────────────────────────────────
-function init() {
-  const sim = new SimRunner(document.getElementById('glcanvas'));
-  new UI(document.getElementById('panel'), sim);
-  const loop = () => { sim.tick(); requestAnimationFrame(loop); };
-  requestAnimationFrame(loop);
+      // Simulation cache: reuse raw if only render-only params changed
+      const simKey=`${params.PR}-${params.N}-${params.ST}-${params.BL}-${params.TU}-${params.DR}-${simW}-${simH}`;
+      let raw, simMs=0;
+      if(simKey===_rawSimKey && _rawCache){
+        raw=_rawCache;
+      } else {
+        const t0=performance.now();
+        raw=simulate(simW,simH,params);
+        simMs=Math.round(performance.now()-t0);
+        _rawCache=raw; _rawSimKey=simKey;
+      }
+
+      const {GA,TH,GR,RO,PS}=params;
+
+      // ── PERSISTENCE ─────────────────────────────────────────────────────
+      // Exponential moving average over sim rows — each cell "remembers" recent
+      // activator exposure. Trailing edges of stripes linger softly downward,
+      // the way a clam's pigment cells integrate hormone signal over time.
+      let effectiveRaw=raw;
+      if(PS>0.01){
+        const buf=new Float32Array(simW*simH);
+        const carry=new Float32Array(simW);
+        for(let sy=0;sy<simH;sy++){
+          const row=sy*simW;
+          for(let sx=0;sx<simW;sx++){
+            carry[sx]=carry[sx]*PS+raw[row+sx]*(1-PS);
+            buf[row+sx]=carry[sx];
+          }
+        }
+        effectiveRaw=buf;
+      }
+
+      // ── ROUGHNESS ───────────────────────────────────────────────────────
+      // Fractal noise field perturbs the threshold per sim cell — substrate
+      // irregularity in the shell's prismatic layer. Cached by canvas size
+      // since it depends only on geometry, not simulation params.
+      const roughSizeKey=`${simW}-${simH}`;
+      if(RO>0.01 && _roughSizeKey!==roughSizeKey){
+        const rfX=makeFractal(6174), rfY=makeFractal(9753);
+        _roughCache=new Float32Array(simW*simH);
+        for(let sy=0;sy<simH;sy++)
+          for(let sx=0;sx<simW;sx++)
+            _roughCache[sy*simW+sx]=(rfX(sx*0.12)+rfY(sy*0.08))*0.5;
+        _roughSizeKey=roughSizeKey;
+      }
+      // Apply substrate irregularity directly to sim data before normalisation.
+      // This way the fractal noise displaces the threshold-crossing itself — ragged
+      // biological edges — rather than being a screen-space overlay.
+      let perturbedRaw=effectiveRaw;
+      if(RO>0.01 && _roughCache){
+        perturbedRaw=new Float32Array(effectiveRaw.length);
+        // Measure raw data range for amplitude scaling
+        let rawMin=Infinity,rawMax=-Infinity;
+        for(let i=0;i<effectiveRaw.length;i++){if(effectiveRaw[i]<rawMin)rawMin=effectiveRaw[i];if(effectiveRaw[i]>rawMax)rawMax=effectiveRaw[i];}
+        const rawRange=Math.max(1e-6,rawMax-rawMin);
+        for(let i=0;i<effectiveRaw.length;i++)
+          perturbedRaw[i]=effectiveRaw[i]+_roughCache[i]*RO*rawRange*1.2;
+      }
+
+      let gMin=Infinity,gMax=-Infinity;
+      for(let i=0;i<perturbedRaw.length;i++){if(perturbedRaw[i]<gMin)gMin=perturbedRaw[i];if(perturbedRaw[i]>gMax)gMax=perturbedRaw[i];}
+
+      const pal=PALETTES[paletteIdx];
+      // Inverted palette swaps background to warm paper white
+      const effectivePal=invertStates[paletteIdx]?{...pal,bg:PAPER}:pal;
+      const bgColor=invertStates[paletteIdx]?PAPER:pal.bg;
+      document.getElementById('swatch-wrap').style.background=`rgb(${bgColor.join(',')})`;
+
+      // Build a 256-entry LUT: norm byte → [r,g,b] + t value for grain mask.
+      // Precomputing Math.pow once per render keeps the pixel loop fast.
+      const LUT=new Uint8Array(256*3);
+      const tLUT=new Float32Array(256);
+      const range=Math.max(1e-6,gMax-gMin);
+      for(let li=0;li<256;li++){
+        const norm=li/255;
+        const shifted=Math.max(0,norm-TH*0.5)/(1-TH*0.5);
+        const t=Math.pow(Math.min(1,shifted),1.0/GA);
+        tLUT[li]=t;
+        const rgb=paletteSample(t,effectivePal);
+        LUT[li*3]=rgb[0]; LUT[li*3+1]=rgb[1]; LUT[li*3+2]=rgb[2];
+      }
+
+      const imgData=ctx.createImageData(IW,IH);
+      const d=imgData.data;
+      // XorShift PRNG: ~4× faster than Math.random() in hot loops
+      let gs=(Math.random()*0xFFFFFFFF)>>>0;
+      const grainNext=()=>{gs^=gs<<13;gs^=gs>>17;gs^=gs<<5;return(gs>>>0)/0xFFFFFFFF-0.5;};
+
+      // Bilinear upscale from sim (simW×simH) → physical (IW×IH)
+      const scaleX=simW/IW, scaleY=simH/IH;
+      for(let py=0;py<IH;py++){
+        const ry=Math.min(simH-1,py*scaleY);
+        const ry0=Math.floor(ry), ry1=Math.min(simH-1,ry0+1);
+        const ryf=ry-ry0;
+        const row0=ry0*simW, row1=ry1*simW;
+        for(let px=0;px<IW;px++){
+          const rx=Math.min(simW-1,px*scaleX);
+          const rx0=Math.floor(rx), rx1=Math.min(simW-1,rx0+1);
+          const rxf=rx-rx0;
+          const rawVal=(perturbedRaw[row0+rx0]*(1-rxf)+perturbedRaw[row0+rx1]*rxf)*(1-ryf)
+                      +(perturbedRaw[row1+rx0]*(1-rxf)+perturbedRaw[row1+rx1]*rxf)*ryf;
+          const norm=(rawVal-gMin)/range;
+          // Edge-modulated grain: perturbs norm before LUT lookup so it creates
+          // actual threshold crossings at stripe edges — Alexis Jamet character.
+          // Peaks in the transition zone (t≈0.5), soft at background and saturated peaks.
+          let grainedNorm=norm;
+          if(GR>0){
+            const tPre=tLUT[Math.min(255,Math.max(0,Math.round(Math.min(1,Math.max(0,norm))*255)))];
+            const edgeMask=0.25+0.75*(4*tPre*(1-tPre));
+            grainedNorm=norm+grainNext()*GR*0.55*edgeMask;
+          }
+          const normByte=Math.min(255,Math.max(0,Math.round(Math.min(1,Math.max(0,grainedNorm))*255)));
+          const li=normByte*3;
+          const idx=(py*IW+px)*4;
+          d[idx]  =LUT[li];
+          d[idx+1]=LUT[li+1];
+          d[idx+2]=LUT[li+2];
+          d[idx+3]=255;
+        }
+      }
+
+      // Post-process blur. Reuse _animBase as the intermediate buffer —
+      // it holds the pre-blur image for the animation loop to sample from.
+      if(!_animBase||_animBase.width!==IW||_animBase.height!==IH)
+        _animBase=new OffscreenCanvas(IW,IH);
+      _animBase.getContext('2d').putImageData(imgData,0,0);
+      _animBgCss=`rgb(${bgColor[0]},${bgColor[1]},${bgColor[2]})`;
+      ctx.filter=`blur(${(0.55*dpr).toFixed(2)}px)`;
+      ctx.drawImage(_animBase,0,0);
+      ctx.filter='none';
+
+      overlay.classList.add('hidden');
+      const label=simMs>0?`${simMs}ms sim · `:' cached · ';
+      document.getElementById('status').textContent=label+`${IW}×${IH}`;
+
+      // ── HAND OFF TO ANIMATION LOOP ────────────────────────────────────
+      _animIW=IW; _animIH=IH;
+      _animBlur=(0.55*dpr);
+      if(!_animOff||_animOff.width!==IW||_animOff.height!==IH)
+        _animOff=new OffscreenCanvas(IW,IH);
+      _animRaf=requestAnimationFrame(drawWave);
+    });
+  },80);
 }
 
-document.addEventListener('DOMContentLoaded', init);
+// ── ANIMATION ─────────────────────────────────────────────────────────────
+// Ocean-refraction warp: two overlapping sine waves shift each row's sample
+// position horizontally by a few pixels. Primary wave drifts slowly "upstream"
+// (against the growth direction); secondary wave at a different frequency and
+// opposing phase drift breaks mechanical periodicity. No grain in anim frames —
+// grain in JS at 60fps reads as static/glitch. The static render's grain
+// provides texture; the animation adds only organic, slow movement.
+function drawWave(){
+  if(!_animBase) return;
+  // ~14s per primary cycle at 60fps
+  _animPhase+=0.0075;
+
+  const IW=_animIW, IH=_animIH;
+  const offCtx=_animOff.getContext('2d');
+
+  // Fill bg first so edges shifted off-canvas don't show transparent holes
+  offCtx.fillStyle=_animBgCss;
+  offCtx.fillRect(0,0,IW,IH);
+
+  // Draw vertical strips of the base image, each offset vertically by a
+  // sine function of x-position + time. GPU-composited, no per-pixel JS.
+  // Primary wave (1.5 cycles across width) + incommensurable secondary.
+  const STRIP=3; // physical pixels per strip
+  for(let px=0;px<IW;px+=STRIP){
+    const xF=px/IW;
+    const dy=Math.round(
+      14*Math.sin(xF*Math.PI*3.0+_animPhase)
+     + 5*Math.sin(xF*Math.PI*5.1-_animPhase*0.71)
+    );
+    const sw=Math.min(STRIP,IW-px);
+    offCtx.drawImage(_animBase, px,0,sw,IH, px,dy,sw,IH);
+    // Clamp edges: stretch the boundary row to fill any gap left by the shift,
+    // same as CSS background-clamp. Blur makes the stretch invisible.
+    if(dy>0) offCtx.drawImage(_animBase, px,0,sw,1, px,0,sw,dy);
+    if(dy<0) offCtx.drawImage(_animBase, px,IH-1,sw,1, px,IH+dy,sw,-dy);
+  }
+
+  ctx.filter=`blur(${_animBlur.toFixed(2)}px)`;
+  ctx.drawImage(_animOff,0,0);
+  ctx.filter='none';
+
+  _animRaf=requestAnimationFrame(drawWave);
+}
+
+// ── CONTROLS ──────────────────────────────────────────────────────────────
+let currentPreset = 0;
+
+function readParams(){
+  const g=id=>+document.getElementById('s-'+id).value;
+  return {
+    PR: currentPreset,
+    N:  g('N'),  ST: g('ST'),
+    BL: g('BL'), BO: g('RO'),  // BO still feeds bloom in simulate (harmless)
+    TU: g('TU'), DR: g('DR'),
+    GA: g('GA'), TH: g('TH'), GR: g('GR'), RO: g('RO'), PS: g('PS'),
+  };
+}
+
+['N','ST','BL','RO','TU','DR','GA','TH','GR','PS'].forEach(id=>{
+  const sl=document.getElementById('s-'+id);
+  const vl=document.getElementById('v-'+id);
+  sl.addEventListener('input',()=>{
+    const dec=sl.step.includes('.')?sl.step.split('.')[1].length:0;
+    vl.textContent=parseFloat(sl.value).toFixed(dec);
+    render();
+  });
+});
+
+// Preset buttons
+const presetBtns = [document.getElementById('btn-sp51a'), document.getElementById('btn-sp512')];
+const PRESET_STEPS = [100, 20];
+
+presetBtns.forEach((btn, idx) => {
+  btn.addEventListener('click', () => {
+    currentPreset = idx;
+    presetBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    // Sync steps slider to preset default
+    const stSlider = document.getElementById('s-ST');
+    stSlider.value = PRESET_STEPS[idx];
+    document.getElementById('v-ST').textContent = PRESET_STEPS[idx];
+    render();
+  });
+});
+
+// Invert button — per-palette state, survives palette switching
+const btnInvert=document.getElementById('btn-invert');
+function syncInvertButton(){
+  btnInvert.classList.toggle('active',invertStates[paletteIdx]);
+  // Update swatch dot indicator
+  document.querySelectorAll('.swatch').forEach((sw,i)=>{
+    sw.classList.toggle('inverted',invertStates[i]);
+  });
+}
+btnInvert.addEventListener('click',()=>{
+  invertStates[paletteIdx]=!invertStates[paletteIdx];
+  syncInvertButton(); render();
+});
+
+// Info modal
+const infoModal=document.getElementById('info-modal');
+document.getElementById('btn-info').addEventListener('click',()=>infoModal.classList.add('open'));
+document.getElementById('info-close').addEventListener('click',()=>infoModal.classList.remove('open'));
+infoModal.addEventListener('click',e=>{if(e.target===infoModal)infoModal.classList.remove('open');});
+
+document.getElementById('btn-save').addEventListener('click',()=>{
+  const a=document.createElement('a');
+  a.download=`mantlecreep-${Date.now()}.png`;
+  a.href=canvas.toDataURL('image/png');
+  a.click();
+});
+
+window.addEventListener('resize',()=>{_rawSimKey=''; render();});
+syncInvertButton();
+render();
 </script>
 </body>
 </html>
