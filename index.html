@@ -7,49 +7,144 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=EB+Garamond:ital,wght@0,400;1,400&display=swap');
   *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-  :root { --bg:#0e0e0e; --panel:#131313; --border:#222; --text:#777; --dim:#333; --accent:#999; }
+  :root { --bg:#0e0e0e; --panel:#111; --border:#1c1c1c; --text:#666; --dim:#2e2e2e; --accent:#888; }
+
   body {
     background:var(--bg); color:var(--text);
-    font-family:'IBM Plex Mono',monospace; font-size:11px;
-    height:100vh; overflow:hidden;
-    display:flex; flex-direction:column; align-items:center;
-    padding:14px 20px 12px; gap:10px;
+    font-family:'IBM Plex Mono',monospace;
+    width:100vw; height:100vh; overflow:hidden;
   }
-  header { width:100%; max-width:1040px; flex-shrink:0; display:flex; justify-content:space-between; align-items:baseline; }
-  header h1 { font-family:'Playfair Display',serif; font-size:14px; font-weight:400; font-style:italic; letter-spacing:0.01em; text-transform:none; color:var(--accent); }
-  header span { font-size:9px; color:var(--dim); }
-  #swatch-wrap { position:relative; width:100%; max-width:1040px; flex:1; min-height:0; }
-  canvas { display:block; width:100%; height:100%; border:1px solid var(--border); }
+
+  /* ── Canvas — full viewport behind everything ── */
+  #swatch-wrap { position:fixed; inset:0; z-index:0; }
+  canvas { display:block; width:100%; height:100%; }
   #overlay {
     position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     background:rgba(14,14,14,0.85); font-size:9px; letter-spacing:0.15em;
-    color:var(--dim); text-transform:uppercase; pointer-events:none; transition:opacity 0.25s;
+    color:var(--dim); text-transform:uppercase; pointer-events:none; transition:opacity 0.3s;
   }
   #overlay.hidden { opacity:0; }
-  #controls {
-    width:100%; max-width:1040px; flex-shrink:0;
-    display:grid; grid-template-columns:repeat(4,1fr);
-    gap:1px; background:var(--border); border:1px solid var(--border);
+
+  /* ── Header — floats top ── */
+  header {
+    position:fixed; top:20px; left:24px; right:24px; z-index:30;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    pointer-events:none;
   }
-  .ctrl { background:var(--panel); padding:8px 12px; display:flex; flex-direction:column; gap:5px; }
-  .ctrl-row { display:flex; justify-content:space-between; align-items:baseline; }
-  .ctrl-name { font-size:9px; letter-spacing:0.05em; color:var(--text); }
-  .ctrl-val  { font-size:9px; color:var(--accent); min-width:36px; text-align:right; }
-  input[type=range] { -webkit-appearance:none; width:100%; height:1px; background:var(--border); outline:none; cursor:pointer; }
-  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:7px; height:7px; background:var(--accent); border-radius:0; cursor:pointer; }
-  #bottom { width:100%; max-width:1040px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center; }
-  #palettes { display:flex; gap:4px; align-items:center; }
-  .swatch { width:20px; height:14px; border:1px solid var(--border); cursor:pointer; transition:border-color 0.12s; position:relative; overflow:hidden; }
-  .swatch.active { border-color:var(--accent); }
-  .swatch:hover  { border-color:#555; }
-  .swatch .sw-l { position:absolute; left:0; top:0; width:50%; height:100%; }
-  .swatch .sw-r { position:absolute; right:0; top:0; width:50%; height:100%; }
-  button { background:none; border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:9px; letter-spacing:0.1em; text-transform:uppercase; padding:6px 12px; cursor:pointer; transition:border-color 0.12s,color 0.12s; }
-  button:hover { border-color:var(--accent); color:var(--accent); }
-  button.active { border-color:var(--accent); color:var(--accent); }
-  #presets { display:flex; gap:4px; align-items:center; }
-  #status { font-size:9px; color:var(--dim); }
-  /* info modal */
+  header * { pointer-events:auto; }
+
+  #title-block {
+    background:rgba(10,10,10,0.78); backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); padding:14px 18px 16px;
+  }
+  header h1 {
+    font-family:'Playfair Display',serif; font-size:56px; font-weight:400;
+    font-style:normal; color:#d0d0d0; letter-spacing:-0.025em; line-height:0.88;
+  }
+  header span {
+    display:block; font-size:8px; color:#555;
+    letter-spacing:0.22em; text-transform:uppercase;
+    margin-top:10px; padding-top:10px; border-top:1px solid #2a2a2a;
+  }
+
+  /* Vertical spine label — left edge */
+  #spine {
+    position:fixed; left:14px; top:50%; transform:translateY(-50%) rotate(180deg);
+    writing-mode:vertical-rl; font-size:8px; letter-spacing:0.18em;
+    text-transform:uppercase; color:#252525; z-index:5; pointer-events:none;
+  }
+  #btn-info {
+    font-size:10px; color:#666; border:1px solid #2a2a2a;
+    background:rgba(10,10,10,0.72); backdrop-filter:blur(6px);
+    -webkit-backdrop-filter:blur(6px); padding:6px 14px;
+  }
+  #btn-info:hover { color:#bbb; border-color:#555; }
+
+  /* ── Floating control cards ── */
+  .ctrl {
+    position:fixed; width:160px; z-index:10; user-select:none;
+    background:rgba(10,10,10,0.72);
+    padding:10px 12px 12px;
+    backdrop-filter:blur(6px);
+    -webkit-backdrop-filter:blur(6px);
+  }
+  .ctrl:hover { z-index:20; }
+
+  /* Label is the drag handle */
+  .ctrl-name {
+    display:block; font-size:9px; letter-spacing:0.12em; text-transform:uppercase;
+    color:#888; cursor:grab; padding-bottom:5px;
+    transition:color 0.15s;
+  }
+  .ctrl-name:hover { color:#bbb; }
+  .ctrl-name:active { cursor:grabbing; }
+
+  /* Large value display */
+  .ctrl-val {
+    display:block; font-size:30px; line-height:1; letter-spacing:-0.02em;
+    color:#aaa; font-variant-numeric:tabular-nums; margin-bottom:10px;
+  }
+
+  input[type=range] {
+    -webkit-appearance:none; appearance:none;
+    width:100%; height:1px; background:#333;
+    outline:none; cursor:pointer; display:block;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:7px; height:7px;
+    background:#aaa; border-radius:0; cursor:pointer;
+  }
+
+  /* Tooltip */
+  .ctrl-tip {
+    display:none; position:absolute; bottom:calc(100% + 6px); left:0;
+    width:240px; background:rgba(8,8,8,0.97); border:1px solid #282828;
+    padding:12px 14px; font-size:10px; line-height:1.75; color:#888;
+    z-index:50; pointer-events:none;
+  }
+  .ctrl:hover .ctrl-tip { display:block; }
+
+  /* ── Bottom bar — floats bottom ── */
+  #bottom {
+    position:fixed; bottom:16px; left:22px; right:22px; z-index:30;
+    display:flex; justify-content:space-between; align-items:center;
+    pointer-events:none;
+    background:rgba(10,10,10,0.78); backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); padding:10px 18px;
+  }
+  #bottom > * { pointer-events:auto; }
+
+  #palettes { display:flex; gap:6px; align-items:center; }
+  .swatch {
+    width:28px; height:18px; border:1px solid #444; cursor:pointer;
+    transition:border-color 0.12s; position:relative; overflow:hidden;
+  }
+  .swatch.active { border-color:#bbb; }
+  .swatch:hover  { border-color:#777; }
+  .swatch .sw-l  { position:absolute; left:0; top:0; width:50%; height:100%; }
+  .swatch .sw-r  { position:absolute; right:0; top:0; width:50%; height:100%; }
+  .swatch.inverted::after {
+    content:''; position:absolute; bottom:2px; right:2px;
+    width:3px; height:3px; background:#bbb; border-radius:50%;
+  }
+
+  button {
+    background:none; border:none; color:#888; font-family:inherit;
+    font-size:10px; letter-spacing:0.1em; text-transform:uppercase;
+    padding:5px 10px; cursor:pointer; transition:color 0.15s;
+  }
+  button:hover { color:#ccc; }
+  button.active { color:#ddd; }
+  #presets { display:flex; gap:8px; align-items:center; }
+  #presets button {
+    font-size:11px; letter-spacing:0.08em;
+    color:#888; border:1px solid #3a3a3a; padding:5px 14px;
+  }
+  #presets button:hover { color:#ccc; border-color:#666; }
+  #presets button.active { color:#eee; border-color:#999; }
+  #status { font-size:9px; color:#666; min-width:100px; text-align:center; }
+
+  /* ── Info modal ── */
   #info-modal {
     display:none; position:fixed; inset:0; z-index:100;
     background:rgba(14,14,14,0.92); align-items:center; justify-content:center;
@@ -59,35 +154,27 @@
     max-width:520px; width:90%; background:var(--panel); border:1px solid var(--border);
     padding:28px 32px 24px; position:relative;
   }
-  #info-box h2 { font-family:'Playfair Display',serif; font-size:18px; font-weight:400; font-style:italic; letter-spacing:0.01em; text-transform:none; color:var(--accent); margin-bottom:18px; }
+  #info-box h2 { font-family:'Playfair Display',serif; font-size:18px; font-weight:400; font-style:italic; color:var(--accent); margin-bottom:18px; }
   #info-box p  { font-family:'EB Garamond',serif; font-size:13px; line-height:1.8; color:var(--text); margin-bottom:12px; }
   #info-box p:last-child { margin-bottom:0; color:var(--dim); font-size:12px; }
   #info-close { position:absolute; top:12px; right:14px; background:none; border:none; color:var(--dim); font-family:inherit; font-size:14px; cursor:pointer; line-height:1; padding:0; }
   #info-close:hover { color:var(--accent); }
-  #btn-info { font-size:9px; }
   #info-box em { color:var(--accent); font-style:italic; }
-  /* per-control tooltips */
-  .ctrl { position:relative; }
-  .ctrl-tip {
-    display:none; position:absolute; bottom:calc(100% + 5px); left:0;
-    width:230px; background:var(--panel); border:1px solid var(--border);
-    padding:9px 11px; font-size:9px; line-height:1.6; color:var(--text);
-    z-index:30; pointer-events:none;
-  }
-  .ctrl:hover .ctrl-tip { display:block; }
-  .swatch.inverted::after {
-    content:''; position:absolute; bottom:2px; right:2px;
-    width:3px; height:3px; background:var(--accent); border-radius:50%;
-  }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Mantle Creep</h1>
-  <span>Meinhardt · reaction-diffusion</span>
+  <div id="title-block">
+    <h1>Mantle Creep</h1>
+    <span>Meinhardt · reaction-diffusion</span>
+  </div>
   <button id="btn-info">info</button>
 </header>
+
+<div id="spine">sp51a · sp512 · reaction-diffusion · meinhardt</div>
+
+<!-- Floating control cards — positioned by JS, draggable -->
 
 <div id="info-modal">
   <div id="info-box">
@@ -100,62 +187,70 @@
   </div>
 </div>
 
+<div class="ctrl" id="ctrl-N">
+  <span class="ctrl-name">Mantle Width</span>
+  <span class="ctrl-val" id="v-N">150</span>
+  <input type="range" id="s-N" min="50" max="600" step="10" value="150">
+  <span class="ctrl-tip">How many chemical cells span the mantle's growing edge. More cells resolve finer pattern structure. The mantle is the thin tissue at the shell margin that deposits both mineral and pigment simultaneously.</span>
+</div>
+<div class="ctrl" id="ctrl-ST">
+  <span class="ctrl-name">Growth Interval</span>
+  <span class="ctrl-val" id="v-ST">100</span>
+  <input type="range" id="s-ST" min="5" max="200" step="5" value="100">
+  <span class="ctrl-tip">Reaction steps computed between each new shell layer. A slow-growing shell lets the activator-inhibitor dynamic fully resolve before the next layer is deposited. Fast growth compresses patterns vertically.</span>
+</div>
+<div class="ctrl" id="ctrl-BL">
+  <span class="ctrl-name">Tidal Bleed</span>
+  <span class="ctrl-val" id="v-BL">0.50</span>
+  <input type="range" id="s-BL" min="0" max="8.0" step="0.1" value="0.5">
+  <span class="ctrl-tip">Lateral diffusion of the activator signal along the growing edge. Mimics pigment molecules bleeding into adjacent mantle tissue. Higher values soften stripe boundaries and widen the transition zone.</span>
+</div>
+<div class="ctrl" id="ctrl-RO">
+  <span class="ctrl-name">Substrate Irregularity</span>
+  <span class="ctrl-val" id="v-RO">0.00</span>
+  <input type="range" id="s-RO" min="0" max="1.0" step="0.02" value="0.0">
+  <span class="ctrl-tip">Fractal variation in local activation threshold across the shell matrix. Real shells have uneven mineral composition — some cells are more or less sensitive to the activator signal, causing ragged biological edges.</span>
+</div>
+<div class="ctrl" id="ctrl-PS">
+  <span class="ctrl-name">Pigment Memory</span>
+  <span class="ctrl-val" id="v-PS">0.95</span>
+  <input type="range" id="s-PS" min="0" max="0.95" step="0.01" value="0.95">
+  <span class="ctrl-tip">Temporal integration of the activator signal. Pigment cells carry chemical memory of recent hormone exposure — a cell that was active a few timesteps ago continues depositing ink. Creates soft trailing edges where stripes dissolve over time.</span>
+</div>
+<div class="ctrl" id="ctrl-TU">
+  <span class="ctrl-name">Turbulence</span>
+  <span class="ctrl-val" id="v-TU">0.00</span>
+  <input type="range" id="s-TU" min="0" max="2.0" step="0.02" value="0.0">
+  <span class="ctrl-tip">Spatial displacement driven by environmental noise. Temperature gradients, water movement, and physical disturbance at the growing edge perturb the stripe pattern, causing deflections and local disorder.</span>
+</div>
+<div class="ctrl" id="ctrl-DR">
+  <span class="ctrl-name">Drift</span>
+  <span class="ctrl-val" id="v-DR">0.00</span>
+  <input type="range" id="s-DR" min="0" max="1.0" step="0.02" value="0.0">
+  <span class="ctrl-tip">Systematic lateral offset accumulated over growth time. Models a persistent tidal current that sweeps the chemical gradient sideways as the shell grows, tilting stripes at a progressive angle.</span>
+</div>
+<div class="ctrl" id="ctrl-GA">
+  <span class="ctrl-name">Pigment Intensity</span>
+  <span class="ctrl-val" id="v-GA">1.65</span>
+  <input type="range" id="s-GA" min="0.1" max="2.5" step="0.05" value="1.65">
+  <span class="ctrl-tip">Concentration-response curve of the pigment cells. Controls how steeply ink density rises with activator concentration — whether a small chemical change causes a sharp jump in color or a gradual build.</span>
+</div>
+<div class="ctrl" id="ctrl-TH">
+  <span class="ctrl-name">Activation Threshold</span>
+  <span class="ctrl-val" id="v-TH">0.46</span>
+  <input type="range" id="s-TH" min="0.0" max="0.9" step="0.02" value="0.46">
+  <span class="ctrl-tip">Minimum activator concentration required to trigger pigment synthesis. Below this level the mantle cell produces no ink — bare shell. Controls how much of the surface is unpigmented versus marked.</span>
+</div>
+<div class="ctrl" id="ctrl-GR">
+  <span class="ctrl-name">Shore Roughness</span>
+  <span class="ctrl-val" id="v-GR">0.35</span>
+  <input type="range" id="s-GR" min="0" max="1.0" step="0.01" value="0.35">
+  <span class="ctrl-tip">Microscale surface texture of the shell's prismatic layer. Each species has a characteristic grain from its mineral microstructure. Concentrated at pigment transition zones where the texture reads as organic variation.</span>
+</div>
+
 <div id="swatch-wrap">
   <canvas id="c"></canvas>
   <div id="overlay">Computing…</div>
-</div>
-
-<div id="controls">
-  <div class="ctrl">
-    <div class="ctrl-row"><span class="ctrl-name">Mantle Width</span><span class="ctrl-val" id="v-N">150</span></div>
-    <input type="range" id="s-N" min="50" max="600" step="10" value="150">
-    <span class="ctrl-tip">How many chemical cells span the mantle's growing edge. More cells resolve finer pattern structure. The mantle is the thin tissue at the shell margin that deposits both mineral and pigment simultaneously.</span>
-  </div>
-  <div class="ctrl">
-    <div class="ctrl-row"><span class="ctrl-name">Growth Interval</span><span class="ctrl-val" id="v-ST">100</span></div>
-    <input type="range" id="s-ST" min="5" max="200" step="5" value="100">
-    <span class="ctrl-tip">Reaction steps computed between each new shell layer. A slow-growing shell lets the activator-inhibitor dynamic fully resolve before the next layer is deposited. Fast growth compresses patterns vertically.</span>
-  </div>
-  <div class="ctrl">
-    <div class="ctrl-row"><span class="ctrl-name">Tidal Bleed</span><span class="ctrl-val" id="v-BL">0.50</span></div>
-    <input type="range" id="s-BL" min="0" max="8.0" step="0.1" value="0.5">
-    <span class="ctrl-tip">Lateral diffusion of the activator signal along the growing edge. Mimics pigment molecules bleeding into adjacent mantle tissue. Higher values soften stripe boundaries and widen the transition zone.</span>
-  </div>
-  <div class="ctrl">
-    <div class="ctrl-row"><span class="ctrl-name">Substrate Irregularity</span><span class="ctrl-val" id="v-RO">0.00</span></div>
-    <input type="range" id="s-RO" min="0" max="1.0" step="0.02" value="0.0">
-    <span class="ctrl-tip">Fractal variation in local activation threshold across the shell matrix. Real shells have uneven mineral composition — some cells are more or less sensitive to the activator signal, causing ragged biological edges.</span>
-  </div>
-  <div class="ctrl">
-    <div class="ctrl-row"><span class="ctrl-name">Pigment Memory</span><span class="ctrl-val" id="v-PS">0.95</span></div>
-    <input type="range" id="s-PS" min="0" max="0.95" step="0.01" value="0.95">
-    <span class="ctrl-tip">Temporal integration of the activator signal. Pigment cells carry chemical memory of recent hormone exposure — a cell that was active a few timesteps ago continues depositing ink. Creates soft trailing edges where stripes dissolve over time.</span>
-  </div>
-  <div class="ctrl">
-    <div class="ctrl-row"><span class="ctrl-name">Turbulence</span><span class="ctrl-val" id="v-TU">0.00</span></div>
-    <input type="range" id="s-TU" min="0" max="2.0" step="0.02" value="0.0">
-    <span class="ctrl-tip">Spatial displacement driven by environmental noise. Temperature gradients, water movement, and physical disturbance at the growing edge perturb the stripe pattern, causing deflections and local disorder.</span>
-  </div>
-  <div class="ctrl">
-    <div class="ctrl-row"><span class="ctrl-name">Drift</span><span class="ctrl-val" id="v-DR">0.00</span></div>
-    <input type="range" id="s-DR" min="0" max="1.0" step="0.02" value="0.0">
-    <span class="ctrl-tip">Systematic lateral offset accumulated over growth time. Models a persistent tidal current that sweeps the chemical gradient sideways as the shell grows, tilting stripes at a progressive angle.</span>
-  </div>
-  <div class="ctrl">
-    <div class="ctrl-row"><span class="ctrl-name">Pigment Intensity</span><span class="ctrl-val" id="v-GA">1.65</span></div>
-    <input type="range" id="s-GA" min="0.1" max="2.5" step="0.05" value="1.65">
-    <span class="ctrl-tip">Concentration-response curve of the pigment cells. Controls how steeply ink density rises with activator concentration — whether a small chemical change causes a sharp jump in color or a gradual build.</span>
-  </div>
-  <div class="ctrl">
-    <div class="ctrl-row"><span class="ctrl-name">Activation Threshold</span><span class="ctrl-val" id="v-TH">0.46</span></div>
-    <input type="range" id="s-TH" min="0.0" max="0.9" step="0.02" value="0.46">
-    <span class="ctrl-tip">Minimum activator concentration required to trigger pigment synthesis. Below this level the mantle cell produces no ink — bare shell. Controls how much of the surface is unpigmented versus marked.</span>
-  </div>
-  <div class="ctrl">
-    <div class="ctrl-row"><span class="ctrl-name">Shore Roughness</span><span class="ctrl-val" id="v-GR">0.35</span></div>
-    <input type="range" id="s-GR" min="0" max="1.0" step="0.01" value="0.35">
-    <span class="ctrl-tip">Microscale surface texture of the shell's prismatic layer. Each species has a characteristic grain from its mineral microstructure. Concentrated at pigment transition zones where the texture reads as organic variation.</span>
-  </div>
 </div>
 
 <div id="bottom">
@@ -166,7 +261,8 @@
     <button id="btn-sp512">sp512 ♥</button>
   </div>
   <span id="status"></span>
-  <button id="btn-save">⬇ Save PNG</button>
+  <button id="btn-reset-layout">reset layout</button>
+  <button id="btn-save">save png</button>
 </div>
 
 <script>
@@ -816,6 +912,87 @@ document.getElementById('btn-save').addEventListener('click',()=>{
 });
 
 window.addEventListener('resize',()=>{_rawSimKey=''; render();});
+
+// ── DRAGGABLE CARDS ───────────────────────────────────────────────────────
+// Default positions as fractions of viewport — intentionally non-columnar.
+// Default positions: clustered left, staggered to avoid the title block
+// (top ~160px) and bottom bar (~80px from bottom). Cards are ~85px tall.
+// x stays 3–16% so nothing crowds the canvas centre.
+const DEFAULT_POSITIONS = {
+  'ctrl-N':  [0.03, 0.20],
+  'ctrl-ST': [0.11, 0.29],
+  'ctrl-BL': [0.03, 0.38],
+  'ctrl-RO': [0.12, 0.47],
+  'ctrl-GR': [0.04, 0.55],
+  'ctrl-PS': [0.13, 0.55],
+  'ctrl-TU': [0.03, 0.63],
+  'ctrl-DR': [0.12, 0.63],
+  'ctrl-GA': [0.03, 0.72],
+  'ctrl-TH': [0.13, 0.72],
+};
+
+const LAYOUT_KEY = 'mantlecreep-layout-v3';
+let topZ = 10;
+
+function saveLayout(){
+  const out={};
+  document.querySelectorAll('.ctrl').forEach(c=>{
+    out[c.id]={left:c.style.left,top:c.style.top};
+  });
+  localStorage.setItem(LAYOUT_KEY,JSON.stringify(out));
+}
+
+function applyLayout(saved){
+  document.querySelectorAll('.ctrl').forEach(c=>{
+    const def=DEFAULT_POSITIONS[c.id];
+    if(saved&&saved[c.id]){
+      c.style.left=saved[c.id].left;
+      c.style.top=saved[c.id].top;
+    } else if(def){
+      c.style.left=Math.round(def[0]*window.innerWidth)+'px';
+      c.style.top =Math.round(def[1]*window.innerHeight)+'px';
+    }
+  });
+}
+
+function resetLayout(){
+  localStorage.removeItem(LAYOUT_KEY);
+  applyLayout(null);
+}
+
+// Load saved or apply defaults
+applyLayout(JSON.parse(localStorage.getItem(LAYOUT_KEY)||'null'));
+
+// Wire drag on each card's label
+document.querySelectorAll('.ctrl').forEach(card=>{
+  const handle=card.querySelector('.ctrl-name');
+  let dragging=false,startX,startY,origL,origT;
+
+  handle.addEventListener('pointerdown',e=>{
+    dragging=true;
+    startX=e.clientX; startY=e.clientY;
+    origL=parseInt(card.style.left)||0;
+    origT=parseInt(card.style.top)||0;
+    card.style.zIndex=++topZ;
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  handle.addEventListener('pointermove',e=>{
+    if(!dragging) return;
+    // Clamp to viewport so cards can't escape off-screen
+    const w=window.innerWidth, h=window.innerHeight;
+    const newL=Math.max(0,Math.min(w-card.offsetWidth, origL+(e.clientX-startX)));
+    const newT=Math.max(0,Math.min(h-60, origT+(e.clientY-startY)));
+    card.style.left=newL+'px';
+    card.style.top =newT+'px';
+  });
+
+  handle.addEventListener('pointerup',()=>{ dragging=false; saveLayout(); });
+});
+
+document.getElementById('btn-reset-layout').addEventListener('click', resetLayout);
+
 syncInvertButton();
 render();
 </script>
