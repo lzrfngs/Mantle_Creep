@@ -94,4 +94,13 @@ This project has been a hard-won education in the gap between understanding an a
 
 ---
 
+Text:
+The outer surface of a mollusc shell is a space-time diagram. Each row records the chemistry of the growing edge at one moment in the animal's life. The mantle — a thin sheet of tissue at the shell margin — secretes new mineral and pigment simultaneously. What determines where pigment falls is a lateral chemical reaction: an activator that self-amplifies locally, paired with a faster-spreading inhibitor that suppresses it everywhere else. The pattern is a consequence of diffusion rates and natural biological processes.
+
+Hans Meinhardt spent three decades at the Max Planck Institute translating shell photographs into differential equations. His 1995 book The Algorithmic Beauty of Sea Shells showed that the same activator-inhibitor architecture — with different diffusion ratios, feedback terms, and source densities — produces the full range of natural shell markings. A small change in inhibitor decay time shifts a pattern from discrete chevrons to continuous waves.
+
+sp51a — Diamond lattice chevrons. Activator-substrate-inhibitor crossing. Seen on Ruditapes philippinarum (Asari clam), various Natica and Conus species.
+
+sp512 — Teardrops. Activator with secondary additive inhibitor. The inverted-heart formation typical of Oliva and Marginella. Organic, heavy, almost calligraphic.
+
 *Last updated: March 16, 2026*

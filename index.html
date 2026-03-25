@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mantle Creep</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=EB+Garamond:ital,wght@0,400;1,400&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&family=Inter:wght@400;900&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=EB+Garamond:ital,wght@0,400;1,400&display=swap');
   *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-  :root { --bg:#0e0e0e; --panel:#111; --border:#1c1c1c; --text:#666; --dim:#2e2e2e; --accent:#888; }
+  :root { --bg:#0e0e0e; --panel:#111; --border:#1c1c1c; --text:#666; --dim:#2e2e2e; --accent:#888; --rust:#8C3A1A; --cream:#D4C4AE; }
 
   body {
     background:var(--bg); color:var(--text);
@@ -17,7 +17,9 @@
 
   /* ── Canvas — full viewport behind everything ── */
   #swatch-wrap { position:fixed; inset:0; z-index:0; }
-  canvas { display:block; width:100%; height:100%; }
+  canvas { display:block; }
+  #c  { position:absolute; inset:0; width:100%; height:100%; visibility:hidden; pointer-events:none; }
+  #gl { position:absolute; inset:0; width:100%; height:100%; }
   #overlay {
     position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     background:rgba(14,14,14,0.85); font-size:9px; letter-spacing:0.15em;
@@ -25,33 +27,19 @@
   }
   #overlay.hidden { opacity:0; }
 
-  /* ── Header — floats top ── */
+  /* ── Header — info button top-right ── */
   header {
-    position:fixed; top:20px; left:24px; right:24px; z-index:30;
-    display:flex; justify-content:space-between; align-items:flex-start;
+    position:fixed; top:48px; right:48px; z-index:30;
+    display:flex; align-items:flex-start;
     pointer-events:none;
   }
   header * { pointer-events:auto; }
-
-  #title-block {
-    background:rgba(10,10,10,0.78); backdrop-filter:blur(8px);
-    -webkit-backdrop-filter:blur(8px); padding:14px 18px 16px;
-  }
-  header h1 {
-    font-family:'Playfair Display',serif; font-size:56px; font-weight:400;
-    font-style:normal; color:#d0d0d0; letter-spacing:-0.025em; line-height:0.88;
-  }
-  header span {
-    display:block; font-size:8px; color:#555;
-    letter-spacing:0.22em; text-transform:uppercase;
-    margin-top:10px; padding-top:10px; border-top:1px solid #2a2a2a;
-  }
 
   /* Vertical spine label — left edge */
   #spine {
     position:fixed; left:14px; top:50%; transform:translateY(-50%) rotate(180deg);
     writing-mode:vertical-rl; font-size:8px; letter-spacing:0.18em;
-    text-transform:uppercase; color:#252525; z-index:5; pointer-events:none;
+    text-transform:uppercase; color:#3a2a1e; z-index:5; pointer-events:none;
   }
   #btn-info {
     font-size:10px; color:#666; border:1px solid #2a2a2a;
@@ -60,73 +48,131 @@
   }
   #btn-info:hover { color:#bbb; border-color:#555; }
 
+  /* ── Model picker tabs — top-left, 48px from edges ── */
+  #model-tabs {
+    position:fixed; top:48px; left:48px; z-index:30;
+    display:flex; pointer-events:none;
+  }
+  #model-tabs * { pointer-events:auto; }
+  #model-tabs button {
+    font-family:'IBM Plex Mono',monospace;
+    font-size:8px; letter-spacing:0.14em; text-transform:uppercase;
+    padding:5px 16px; height:24px;
+    background:#0a0a0a; color:#3a3a3a;
+    border:none; border-radius:0; cursor:pointer;
+    transition:color 0.12s, background 0.12s;
+  }
+  #model-tabs button.active { background:#111; color:#fff; }
+  #model-tabs button:hover:not(.active) { color:#888; }
+
   /* ── Floating control cards ── */
   .ctrl {
-    position:fixed; width:160px; z-index:10; user-select:none;
-    background:rgba(10,10,10,0.72);
-    padding:10px 12px 12px;
-    backdrop-filter:blur(6px);
-    -webkit-backdrop-filter:blur(6px);
+    position:fixed; width:230px; height:91px; z-index:10; user-select:none;
+    background:#0d0d0d;
+    padding:8px 10px 10px;
+    border-radius:0;
+    display:flex; flex-direction:column;
   }
   .ctrl:hover { z-index:20; }
 
-  /* Label is the drag handle */
-  .ctrl-name {
-    display:block; font-size:9px; letter-spacing:0.12em; text-transform:uppercase;
-    color:#888; cursor:grab; padding-bottom:5px;
-    transition:color 0.15s;
+  /* Accent dot — hidden in new layout */
+  .ctrl-num { display:none; }
+
+  /* Value — small monospace, appears above label */
+  .ctrl-val {
+    display:block; font-size:9px; line-height:1;
+    color:#555; font-family:'IBM Plex Mono',monospace;
+    font-variant-numeric:tabular-nums;
+    font-weight:300; letter-spacing:0.04em;
+    margin-bottom:4px; order:0;
   }
-  .ctrl-name:hover { color:#bbb; }
+
+  /* Label — large bold display, the drag handle */
+  .ctrl-name {
+    display:block; font-size:20px; line-height:1.1; text-transform:uppercase;
+    color:#fff; cursor:grab;
+    font-family:'Inter',sans-serif; font-weight:900;
+    letter-spacing:-0.01em;
+    order:1;
+  }
   .ctrl-name:active { cursor:grabbing; }
 
-  /* Large value display */
-  .ctrl-val {
-    display:block; font-size:30px; line-height:1; letter-spacing:-0.02em;
-    color:#aaa; font-variant-numeric:tabular-nums; margin-bottom:10px;
-  }
-
+  /* Filled track — pinned to bottom via margin-top:auto */
   input[type=range] {
     -webkit-appearance:none; appearance:none;
-    width:100%; height:1px; background:#333;
+    width:100%; height:3px;
+    background:linear-gradient(to right,
+      var(--rust) 0%, var(--rust) var(--fill,0%),
+      #2a2a2a var(--fill,0%), #2a2a2a 100%);
     outline:none; cursor:pointer; display:block;
+    border-radius:0; order:2; margin-top:auto;
   }
   input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance:none; width:7px; height:7px;
-    background:#aaa; border-radius:0; cursor:pointer;
+    -webkit-appearance:none; width:2px; height:16px;
+    background:#fff; border-radius:0; cursor:pointer;
+    margin-top:-6.5px;
+  }
+  input[type=range]::-moz-range-thumb {
+    width:2px; height:16px;
+    background:#fff; border-radius:0; cursor:pointer; border:none;
+  }
+  input[type=range]::-moz-range-track {
+    height:3px;
+    background:linear-gradient(to right,
+      var(--rust) 0%, var(--rust) var(--fill,0%),
+      #2a2a2a var(--fill,0%), #2a2a2a 100%);
   }
 
-  /* Tooltip */
-  .ctrl-tip {
-    display:none; position:absolute; bottom:calc(100% + 6px); left:0;
-    width:240px; background:rgba(8,8,8,0.97); border:1px solid #282828;
-    padding:12px 14px; font-size:10px; line-height:1.75; color:#888;
-    z-index:50; pointer-events:none;
-  }
-  .ctrl:hover .ctrl-tip { display:block; }
+  /* Per-card tooltip spans — hidden; content read by JS into #tooltip-box */
+  .ctrl-tip { display:none !important; }
 
-  /* ── Bottom bar — floats bottom ── */
+  /* Persistent tooltip box — sits below card grid, position set by JS */
+  #tooltip-box {
+    position:fixed; left:48px;
+    width:230px;
+    background:#0d0d0d; border:1px solid rgba(255,255,255,0.1);
+    padding:10px 12px;
+    font-size:9px; line-height:1.75; color:#fff;
+    font-family:'IBM Plex Mono',monospace;
+    z-index:25; pointer-events:none;
+    opacity:0; transition:opacity 0.18s;
+  }
+  #tooltip-box.visible { opacity:1; }
+
+  /* ── Viewport registration marks — specimen examination overlay ── */
+  #reg-marks {
+    position:fixed; inset:0; z-index:2; pointer-events:none;
+  }
+  #reg-marks span {
+    position:absolute; width:16px; height:16px;
+    border:1px solid var(--rust); opacity:0.18; display:block;
+  }
+  #reg-marks span:nth-child(1) { top:14px;    left:14px;   border-right:0; border-bottom:0; }
+  #reg-marks span:nth-child(2) { top:14px;    right:14px;  border-left:0;  border-bottom:0; }
+  #reg-marks span:nth-child(3) { bottom:14px; left:14px;   border-right:0; border-top:0; }
+  #reg-marks span:nth-child(4) { bottom:14px; right:14px;  border-left:0;  border-top:0; }
+
+  /* ── Bottom bar — edge-to-edge, 50px tall ── */
   #bottom {
-    position:fixed; bottom:16px; left:22px; right:22px; z-index:30;
-    display:flex; justify-content:space-between; align-items:center;
+    position:fixed; bottom:0; left:0; right:0; z-index:30;
+    display:flex; align-items:center; gap:24px;
     pointer-events:none;
-    background:rgba(10,10,10,0.78); backdrop-filter:blur(8px);
-    -webkit-backdrop-filter:blur(8px); padding:10px 18px;
+    background:rgba(10,10,10,0.92); backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); padding:0 48px;
+    height:50px;
   }
   #bottom > * { pointer-events:auto; }
+  #bottom #status { margin-left:auto; }
 
-  #palettes { display:flex; gap:6px; align-items:center; }
+  #palettes { display:flex; gap:4px; align-items:center; }
   .swatch {
-    width:28px; height:18px; border:1px solid #444; cursor:pointer;
-    transition:border-color 0.12s; position:relative; overflow:hidden;
+    width:50px; height:30px; border-radius:0; cursor:pointer;
+    position:relative;
+    outline:2px solid transparent; outline-offset:2px;
+    transition:outline-color 0.12s, opacity 0.12s;
   }
-  .swatch.active { border-color:#bbb; }
-  .swatch:hover  { border-color:#777; }
-  .swatch .sw-l  { position:absolute; left:0; top:0; width:50%; height:100%; }
-  .swatch .sw-r  { position:absolute; right:0; top:0; width:50%; height:100%; }
-  .swatch.inverted::after {
-    content:''; position:absolute; bottom:2px; right:2px;
-    width:3px; height:3px; background:#bbb; border-radius:50%;
-  }
+  .swatch:hover  { opacity:0.75; }
+  .swatch.active { outline:2px solid #fff; }
 
   button {
     background:none; border:none; color:#888; font-family:inherit;
@@ -135,56 +181,72 @@
   }
   button:hover { color:#ccc; }
   button.active { color:#ddd; }
-  #presets { display:flex; gap:8px; align-items:center; }
-  #presets button {
-    font-size:11px; letter-spacing:0.08em;
-    color:#888; border:1px solid #3a3a3a; padding:5px 14px;
+  /* Invert toggle switch */
+  #invert-wrap {
+    display:flex; align-items:center; gap:8px; cursor:pointer;
   }
-  #presets button:hover { color:#ccc; border-color:#666; }
-  #presets button.active { color:#eee; border-color:#999; }
-  #status { font-size:9px; color:#666; min-width:100px; text-align:center; }
+  #invert-wrap span {
+    font-size:8px; letter-spacing:0.14em; text-transform:uppercase;
+    color:#555; font-family:'IBM Plex Mono',monospace;
+    user-select:none;
+  }
+  .toggle { position:relative; width:34px; height:18px; flex-shrink:0; }
+  .toggle input { display:none; }
+  .toggle-track {
+    position:absolute; inset:0; border-radius:9px;
+    background:#2a2a2a; transition:background 0.2s; cursor:pointer;
+  }
+  .toggle input:checked ~ .toggle-track { background:var(--rust); }
+  .toggle-thumb {
+    position:absolute; top:2px; left:2px;
+    width:14px; height:14px; border-radius:50%;
+    background:#fff; transition:transform 0.2s; pointer-events:none;
+  }
+  .toggle input:checked ~ .toggle-thumb { transform:translateX(16px); }
+  #status { font-size:9px; color:#444; }
 
-  /* ── Info modal ── */
-  #info-modal {
-    display:none; position:fixed; inset:0; z-index:100;
-    background:rgba(14,14,14,0.92); align-items:center; justify-content:center;
-  }
-  #info-modal.open { display:flex; }
+  /* ── Info card — fixed top-right, open on load ── */
   #info-box {
-    max-width:520px; width:90%; background:var(--panel); border:1px solid var(--border);
-    padding:28px 32px 24px; position:relative;
+    position:fixed; top:48px; right:48px; z-index:40;
+    width:680px; max-height:calc(100vh - 48px); overflow-y:auto;
+    background:rgba(8,4,2,0.92);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border-radius:3px; padding:24px 24px 20px;
+    transition:opacity 0.25s, visibility 0.25s;
   }
-  #info-box h2 { font-family:'Playfair Display',serif; font-size:18px; font-weight:400; font-style:italic; color:var(--accent); margin-bottom:18px; }
-  #info-box p  { font-family:'EB Garamond',serif; font-size:13px; line-height:1.8; color:var(--text); margin-bottom:12px; }
-  #info-box p:last-child { margin-bottom:0; color:var(--dim); font-size:12px; }
-  #info-close { position:absolute; top:12px; right:14px; background:none; border:none; color:var(--dim); font-family:inherit; font-size:14px; cursor:pointer; line-height:1; padding:0; }
+  #info-box.hidden { opacity:0; visibility:hidden; pointer-events:none; }
+  #info-box h2 { font-family:'EB Garamond',serif; font-size:32px; font-weight:400; font-style:italic; color:#fff; margin-bottom:16px; }
+  #info-box p  { font-family:'EB Garamond',serif; font-size:22px; line-height:1.6; color:var(--text); margin-bottom:14px; }
+  #info-box p:last-child { margin-bottom:0; color:var(--dim); font-size:18px; }
+  #info-close { position:absolute; top:12px; right:14px; background:none; border:none; color:var(--dim); font-family:inherit; font-size:18px; cursor:pointer; line-height:1; padding:0; }
   #info-close:hover { color:var(--accent); }
   #info-box em { color:var(--accent); font-style:italic; }
 </style>
 </head>
 <body>
 
+<div id="model-tabs">
+  <button id="btn-sp51a" class="active">SP51A</button>
+  <button id="btn-sp512">SP512</button>
+  <button id="btn-sp43">SP43</button>
+</div>
+
 <header>
-  <div id="title-block">
-    <h1>Mantle Creep</h1>
-    <span>Meinhardt · reaction-diffusion</span>
-  </div>
   <button id="btn-info">info</button>
 </header>
 
-<div id="spine">sp51a · sp512 · reaction-diffusion · meinhardt</div>
+<div id="spine">sp51a · sp512 · sp43 · reaction-diffusion · meinhardt</div>
 
 <!-- Floating control cards — positioned by JS, draggable -->
 
-<div id="info-modal">
-  <div id="info-box">
+<div id="info-box">
     <button id="info-close">×</button>
     <h2>Mantle Creep</h2>
-    <p>The outer surface of a mollusc shell is a space-time diagram. Each row records the chemistry of the growing edge at one moment in the animal's life. The mantle — a thin sheet of tissue at the shell margin — secretes new mineral and pigment simultaneously. What determines where pigment falls is a lateral chemical reaction: an <em>activator</em> that self-amplifies locally, paired with a faster-spreading <em>inhibitor</em> that suppresses it everywhere else. No template. No instruction. The pattern is a consequence of diffusion rates.</p>
-    <p>Hans Meinhardt spent three decades at the Max Planck Institute translating shell photographs into differential equations. His 1995 book <em>The Algorithmic Beauty of Sea Shells</em> showed that the same activator-inhibitor architecture — with different diffusion ratios, feedback terms, and source densities — produces the full range of natural shell markings. A small change in inhibitor decay time shifts a pattern from discrete chevrons to continuous waves. The parameters are everything.</p>
-    <p><em>sp51a</em> — Diamond lattice chevrons. Activator-substrate-inhibitor crossing. Seen on Ruditapes philippinarum (Asari clam), various Natica and Conus species, and in A.A. Murakami's textile installation A Thousand Layers of Stomach. <em>sp512</em> — Teardrops. Activator with secondary additive inhibitor. The inverted-heart formation typical of Oliva and Marginella. Organic, heavy, almost calligraphic.</p>
-    <p>Based on H. Meinhardt, <em>The Algorithmic Beauty of Sea Shells</em> (Springer, 4th ed.). Parameters verified from kaesve.nl and C. Viau's Observable notebook. Hover any slider to see the biological process it models.</p>
-  </div>
+    <p>The outer surface of a mollusc shell is a space-time diagram. Each row records the chemistry of the growing edge at one moment in the animal's life. The mantle — a thin sheet of tissue at the shell margin — secretes new mineral and pigment simultaneously. What determines where pigment falls is a lateral chemical reaction: an <em>activator</em> that self-amplifies locally, paired with a faster-spreading <em>inhibitor</em> that suppresses it everywhere else. The pattern is a consequence of diffusion rates and natural biological processes.</p>
+    <p>Hans Meinhardt spent three decades at the Max Planck Institute translating shell photographs into differential equations. His 1995 book <em>The Algorithmic Beauty of Sea Shells</em> showed that the same activator-inhibitor architecture — with different diffusion ratios, feedback terms, and source densities — produces the full range of natural shell markings. A small change in inhibitor decay time shifts a pattern from discrete chevrons to continuous waves.</p>
+    <p><em>sp51a</em> — Diamond lattice chevrons. Activator-substrate-inhibitor crossing. Seen on Ruditapes philippinarum (Asari clam), various Natica and Conus species.</p>
+    <p><em>sp512</em> — Teardrops. Activator with secondary additive inhibitor. The inverted-heart formation typical of Oliva and Marginella. Organic, heavy, almost calligraphic.</p>
+    <p><em>sp43</em> — Wave termination. Activator-depletion with sinusoidally varying substrate supply. Oscillating wave fronts propagate through rich zones and collapse where substrate is depleted — producing the interrupted diagonal banding seen on Oliva and certain Conus.</p>
 </div>
 
 <div class="ctrl" id="ctrl-N">
@@ -196,7 +258,7 @@
 <div class="ctrl" id="ctrl-ST">
   <span class="ctrl-name">Growth Interval</span>
   <span class="ctrl-val" id="v-ST">100</span>
-  <input type="range" id="s-ST" min="5" max="200" step="5" value="100">
+  <input type="range" id="s-ST" min="1" max="200" step="1" value="100">
   <span class="ctrl-tip">Reaction steps computed between each new shell layer. A slow-growing shell lets the activator-inhibitor dynamic fully resolve before the next layer is deposited. Fast growth compresses patterns vertically.</span>
 </div>
 <div class="ctrl" id="ctrl-BL">
@@ -247,19 +309,39 @@
   <input type="range" id="s-GR" min="0" max="1.0" step="0.01" value="0.35">
   <span class="ctrl-tip">Microscale surface texture of the shell's prismatic layer. Each species has a characteristic grain from its mineral microstructure. Concentrated at pigment transition zones where the texture reads as organic variation.</span>
 </div>
+<div class="ctrl" id="ctrl-IR">
+  <span class="ctrl-name">Iridescence</span>
+  <span class="ctrl-val" id="v-IR">0.00</span>
+  <input type="range" id="s-IR" min="0" max="1.0" step="0.02" value="0.0">
+  <span class="ctrl-tip">Thin-film interference colour shift keyed to surface angle. Mimics the nacreous layer of pearl-bearing molluscs — structural colour from light scattering in aragonite platelets.</span>
+</div>
+<div class="ctrl" id="ctrl-RL">
+  <span class="ctrl-name">Surface Relief</span>
+  <span class="ctrl-val" id="v-RL">0.00</span>
+  <input type="range" id="s-RL" min="0" max="1.0" step="0.02" value="0.0">
+  <span class="ctrl-tip">Phong specular highlight derived from the pigment gradient as a height map. Each stripe edge reads as a physical ridge — the rib structure of Conus and Oliva. At 0, the surface is matte.</span>
+</div>
+
+<div id="reg-marks"><span></span><span></span><span></span><span></span></div>
 
 <div id="swatch-wrap">
   <canvas id="c"></canvas>
+  <canvas id="gl"></canvas>
   <div id="overlay">Computing…</div>
 </div>
 
+<div id="tooltip-box"></div>
+
 <div id="bottom">
   <div id="palettes"></div>
-  <button id="btn-invert">Invert</button>
-  <div id="presets">
-    <button id="btn-sp51a" class="active">sp51a ◆</button>
-    <button id="btn-sp512">sp512 ♥</button>
-  </div>
+  <label id="invert-wrap" for="chk-invert">
+    <span>Invert</span>
+    <div class="toggle">
+      <input type="checkbox" id="chk-invert">
+      <span class="toggle-track"></span>
+      <span class="toggle-thumb"></span>
+    </div>
+  </label>
   <span id="status"></span>
   <button id="btn-reset-layout">reset layout</button>
   <button id="btn-save">save png</button>
@@ -311,41 +393,70 @@ const PALETTES = [
     light:[210,200,240],
   },
   {
-    name:'sepia',
-    bg:   [12,9,5],
-    dark: [14,9,4],
-    mid:  [150,100,45],
-    light:[210,190,155],
-  },
-  {
     name:'glacier',
     bg:   [5,8,12],
     dark: [10,40,80],
-    mid:  [80,185,210],
-    light:[195,220,235],
+    mid:  [115,175,200],
+    light:[195,215,228],
   },
 ];
 
-// Warm paper white used as background for inverted palettes
+// Warm paper white used as background for inverted dark palettes
 const PAPER = [248, 245, 240];
-// Per-palette invert state (persists when switching palettes)
-const invertStates = new Array(PALETTES.length).fill(false);
-invertStates[2] = true; // ink palette inverted on load
+// Near-black used as background for inverted light palettes (e.g. ink)
+const DARK_INV = [10, 8, 6];
+
+// Returns the correct inverted background for a palette.
+// Light-bg palettes (like ink) invert to dark; dark-bg palettes invert to paper.
+function invertedBg(pal){
+  const luma = 0.299*pal.bg[0] + 0.587*pal.bg[1] + 0.114*pal.bg[2];
+  return luma > 128 ? DARK_INV : PAPER;
+}
+
+// Derive a UI accent colour from the palette's mid stop.
+// If mid is too dark (luma < 70) blend it toward light so it's legible.
+function paletteAccent(pal){
+  const m = pal.mid;
+  const luma = 0.299*m[0] + 0.587*m[1] + 0.114*m[2];
+  if(luma < 70){
+    const l = pal.light;
+    return [Math.round((m[0]+l[0])/2), Math.round((m[1]+l[1])/2), Math.round((m[2]+l[2])/2)];
+  }
+  return m;
+}
+function applyAccent(pal){
+  const [r,g,b] = paletteAccent(pal);
+  document.documentElement.style.setProperty('--rust', `rgb(${r},${g},${b})`);
+}
+
+// Universal invert state — one toggle, applies to whichever palette is active
+let invertState = false;
+
+// Flat swatch colours, one per palette (ivory, amber, ink, jade, rust, lavender, glacier)
+const SWATCH_COLORS = ['#B79653','#C3722C','#A10ED2','#5CA371','#BF532A','#AA8DE4','#84AEC6'];
+
+// Per-palette accent colour for the vitiligo pigment shader [r,g,b] normalised 0–1.
+// Chosen to match real shell secondary pigmentation: a distinct but adjacent hue
+// that would plausibly co-occur with the palette's primary colour.
+const PALETTE_ACCENTS = [
+  [0.53, 0.37, 0.68], // ivory  (warm gold)  → dusty purple
+  [0.86, 0.49, 0.58], // amber  (orange)     → rose / pink
+  [0.72, 0.88, 0.86], // ink    (dark indigo) → light teal-blue
+  [0.76, 0.82, 0.22], // jade   (green)      → yellow-green
+  [0.86, 0.42, 0.55], // rust   (red-orange) → deep pink
+  [0.82, 0.72, 0.36], // lavender            → warm amber
+  [0.68, 0.56, 0.78], // glacier (blue)      → pale violet-rose
+];
 
 let paletteIdx=2;
 const palRow=document.getElementById('palettes');
 PALETTES.forEach((p,i)=>{
   const sw=document.createElement('div');
   sw.className='swatch'+(i===paletteIdx?' active':'');
-  sw.title=p.name;
-  const l=document.createElement('div'); l.className='sw-l';
-  l.style.background=`rgb(${p.light.join(',')})`;
-  const r=document.createElement('div'); r.className='sw-r';
-  r.style.background=`rgb(${p.mid.join(',')})`;
-  sw.appendChild(l); sw.appendChild(r);
+  sw.style.background=SWATCH_COLORS[i]||'#888';
   sw.addEventListener('click',()=>{
     document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active'));
-    sw.classList.add('active'); paletteIdx=i; syncInvertButton(); render();
+    sw.classList.add('active'); paletteIdx=i; applyAccent(PALETTES[i]); render();
   });
   palRow.appendChild(sw);
 });
@@ -361,25 +472,301 @@ let _rawCache = null, _rawSimKey = '';
 let _roughCache = null, _roughSizeKey = '';
 
 // ── ANIMATION STATE ──────────────────────────────────────────────────────
-// The animation loop reuses the last render's perturbedRaw + LUT —
-// no resimulation. Only the horizontal warp phase advances each frame.
 let _animRaf    = null;
 let _animPhase  = 0;
-let _animBase   = null; // pre-blur rendered image, updated each render
+let _animBase   = null; // raw rendered OffscreenCanvas; source for GL texture
 let _animBgCss  = 'rgb(0,0,0)';
 let _animIW     = 0, _animIH = 0;
-let _animBlur   = 0;
-let _animOff    = null;
+
+// ── WEBGL STATE ───────────────────────────────────────────────────────────
+const glCanvas = document.getElementById('gl');
+let gl = null, glProg = null, glTex = null, glLoc = {};
 
 function setCanvasSize(){
   const wrap=document.getElementById('swatch-wrap');
   const dpr=window.devicePixelRatio||1;
   const cssW=Math.max(200,wrap.clientWidth);
   const cssH=Math.max(80,wrap.clientHeight);
-  canvas.width=Math.round(cssW*dpr);
-  canvas.height=Math.round(cssH*dpr);
-  canvas.style.width=cssW+'px';
-  canvas.style.height=cssH+'px';
+  const pw=Math.round(cssW*dpr), ph=Math.round(cssH*dpr);
+  canvas.width=pw; canvas.height=ph;
+  canvas.style.width=cssW+'px'; canvas.style.height=cssH+'px';
+  glCanvas.width=pw; glCanvas.height=ph;
+  glCanvas.style.width=cssW+'px'; glCanvas.style.height=cssH+'px';
+}
+
+// ── WEBGL INIT ────────────────────────────────────────────────────────────
+// Architecture: 2D canvas (#c) generates the simulation image into _animBase.
+// _animBase is uploaded as a GL texture. A fullscreen quad shader applies:
+//   - Per-pixel vertical UV warp (fixes the moiré from the old strip compositor)
+//   - 5-tap blur (replaces 2D canvas filter blur)
+//   - Surface normal from luminance gradient
+//   - Iridescence: hue rotation keyed to normal angle + slow time drift
+//   - Specular relief: Phong highlight from directional light
+//   - Vignette: subtle radial falloff
+// When uIrid=0 and uRelief=0 the output is visually identical to the
+// pre-WebGL risograph quality.
+function initGL(){
+  gl=glCanvas.getContext('webgl',{antialias:false,alpha:false,preserveDrawingBuffer:true});
+  if(!gl){console.warn('WebGL unavailable — falling back to 2D canvas');gl=null;return;}
+
+  const vs=`
+    attribute vec2 aPos;
+    varying vec2 vUv;
+    void main(){
+      vUv=aPos*0.5+0.5;
+      gl_Position=vec4(aPos,0.0,1.0);
+    }`;
+
+  // Rodrigues rotation around grey diagonal — cheap GPU hue shift
+  const fs=`
+    precision highp float;
+    uniform sampler2D uTex;
+    uniform float uTime;
+    uniform float uIrid;
+    uniform float uRelief;
+    uniform vec2 uTexSize;
+    uniform vec3 uAccent;
+    varying vec2 vUv;
+    #define PI 3.14159265359
+
+    vec3 hueShift(vec3 col,float h){
+      const vec3 k=vec3(0.57735);
+      float c=cos(h),s=sin(h);
+      return col*c+cross(k,col)*s+k*dot(k,col)*(1.0-c);
+    }
+    float luma(vec3 c){return dot(c,vec3(0.299,0.587,0.114));}
+
+    // Soft-light blend (W3C composite spec).
+    // Preserves base luminance/texture; accent acts as a translucent pigment
+    // layer — never fully replaces, always feels grown-in rather than applied.
+    vec3 softLight(vec3 base,vec3 blend){
+      vec3 D=mix(((16.0*base-12.0)*base+4.0)*base, sqrt(base), step(0.25,base));
+      return mix(base-(1.0-2.0*blend)*base*(1.0-base),
+                 base+(2.0*blend-1.0)*(D-base),
+                 step(0.5,blend));
+    }
+
+    // Caustic focal-line model.
+    // Three traveling sine waves at non-parallel directions and incommensurable
+    // speeds. Average, then raise to a high power — result is near-zero everywhere
+    // except where all three constructively interfere simultaneously.
+    // That's the physics: caustic brightness only at photon convergence points.
+    float causticLayer(vec2 p,float t){
+      float s=(sin(p.x*5.1+p.y*2.3+t*0.52)
+              +sin(p.x*2.7-p.y*4.6+t*0.38)
+              +sin(p.x*3.9+p.y*1.1-t*0.67))/3.0;
+      return pow(max(0.0,s),5.0);
+    }
+
+    // ── FBM noise for organic pigment patches (vitiligo model) ─────────────
+    // Hash: scrambles a 2D coordinate into [0,1]. No trig — GPU-cheap.
+    float hash2(vec2 p){
+      p=fract(p*vec2(127.1,311.7));
+      p+=dot(p,p+45.32);
+      return fract(p.x*p.y);
+    }
+    // Bilinear value noise: smooth [0,1] field over the grid.
+    float vnoise(vec2 p){
+      vec2 i=floor(p), f=fract(p);
+      vec2 u=f*f*(3.0-2.0*f);
+      return mix(mix(hash2(i),           hash2(i+vec2(1,0)),u.x),
+                 mix(hash2(i+vec2(0,1)), hash2(i+vec2(1,1)),u.x), u.y);
+    }
+    // Four-octave FBM: large blobs with fine sub-structure, like real pigment.
+    float fbm(vec2 p){
+      float v=0.0,a=0.5;
+      v+=vnoise(p)*a; p=p*2.13+vec2(1.7,9.2); a*=0.5;
+      v+=vnoise(p)*a; p=p*2.07+vec2(8.3,2.8); a*=0.5;
+      v+=vnoise(p)*a; p=p*2.11+vec2(3.1,6.7); a*=0.5;
+      v+=vnoise(p)*a;
+      return v; // range ≈ [0,1]
+    }
+
+    void main(){
+      vec2 px=1.0/uTexSize;
+
+      // Shell-pattern warp: three incommensurable frequencies + cross-axis.
+      // Simulates refraction through moving water. Non-harmonic frequencies
+      // prevent moiré beating against any single stripe spacing.
+      float dy=0.009*sin(vUv.x*PI*2.3+uTime)
+              +0.004*sin(vUv.x*PI*5.7-uTime*0.71)
+              +0.002*sin(vUv.x*PI*8.9+uTime*0.43);
+      float dx=0.003*sin(vUv.y*PI*3.1+uTime*0.83)
+              +0.001*sin(vUv.y*PI*7.3-uTime*0.51);
+      // Fade warp to zero near UV edges so CLAMP_TO_EDGE never sees a
+      // discontinuity — eliminates the frozen-strip tear at screen borders.
+      float eF = smoothstep(0.0,0.06,vUv.x)*smoothstep(1.0,0.94,vUv.x)
+                *smoothstep(0.0,0.06,vUv.y)*smoothstep(1.0,0.94,vUv.y);
+      vec2 wUv=clamp(vUv+vec2(dx,dy)*eF,vec2(0.0),vec2(1.0));
+
+      // 5-tap cross blur
+      vec3 col=texture2D(uTex,wUv).rgb*0.50
+              +texture2D(uTex,wUv+vec2( px.x,0.0)).rgb*0.125
+              +texture2D(uTex,wUv+vec2(-px.x,0.0)).rgb*0.125
+              +texture2D(uTex,wUv+vec2(0.0, px.y)).rgb*0.125
+              +texture2D(uTex,wUv+vec2(0.0,-px.y)).rgb*0.125;
+
+      // ── CAUSTIC LIGHT LAYER ─────────────────────────────────────────────
+      // Uses raw vUv, not wUv. Caustics form in the water column above the
+      // shell — independent of the shell-pattern refraction below. This
+      // separation of "light above" from "pattern below" creates parallax:
+      // bright lines and stripes move at different rates = perceived depth.
+      //
+      // Two scales: wide (deep-water surface, slower) + fine (close ripples).
+      // Different spatial scales + time multipliers = scale parallax = 3D volume.
+      float c1=causticLayer(vUv*2.0,uTime);
+      float c2=causticLayer(vUv*4.1+vec2(0.27,0.54),uTime*0.71);
+      float caustic=c1*0.62+c2*0.38;
+      // Additive warm light (sunlight color temperature).
+      // Modulated by local luma: pigmented areas catch caustic light,
+      // bare background barely does — matches subsurface light scattering.
+      float localLuma=luma(col)+0.12;
+      // Always-on base shimmer at IR=0 (improves 3D at any slider setting).
+      // Amplified by Iridescence: both are wet optical effects.
+      float causticStr=0.18+uIrid*0.28;
+      col+=caustic*causticStr*localLuma*vec3(1.0,0.96,0.86);
+
+      // Fine gradient (2px) for iridescence irregularity
+      vec2 epsF=px*2.0;
+      float lxF=luma(texture2D(uTex,wUv+vec2(-epsF.x,0.0)).rgb)
+               -luma(texture2D(uTex,wUv+vec2( epsF.x,0.0)).rgb);
+      float lyF=luma(texture2D(uTex,wUv+vec2(0.0,-epsF.y)).rgb)
+               -luma(texture2D(uTex,wUv+vec2(0.0, epsF.y)).rgb);
+
+      // Multi-scale gradient: average three incommensurable offsets so no single
+      // roughness frequency resonates with all three — eliminates moiré against GR.
+      vec2 eC1=px*10.0, eC2=px*18.0, eC3=px*28.0;
+      float lxC=(luma(texture2D(uTex,wUv+vec2(-eC1.x,0.0)).rgb)-luma(texture2D(uTex,wUv+vec2(eC1.x,0.0)).rgb)
+                +luma(texture2D(uTex,wUv+vec2(-eC2.x,0.0)).rgb)-luma(texture2D(uTex,wUv+vec2(eC2.x,0.0)).rgb)
+                +luma(texture2D(uTex,wUv+vec2(-eC3.x,0.0)).rgb)-luma(texture2D(uTex,wUv+vec2(eC3.x,0.0)).rgb))/3.0;
+      float lyC=(luma(texture2D(uTex,wUv+vec2(0.0,-eC1.y)).rgb)-luma(texture2D(uTex,wUv+vec2(0.0,eC1.y)).rgb)
+                +luma(texture2D(uTex,wUv+vec2(0.0,-eC2.y)).rgb)-luma(texture2D(uTex,wUv+vec2(0.0,eC2.y)).rgb)
+                +luma(texture2D(uTex,wUv+vec2(0.0,-eC3.y)).rgb)-luma(texture2D(uTex,wUv+vec2(0.0,eC3.y)).rgb))/3.0;
+      vec3 coarseNormal=normalize(vec3(lxC*4.0,lyC*4.0,1.0));
+
+      // Iridescence: natural pigment-shift quality, not hue rotation.
+      // Real nacre/mother-of-pearl shifts by ~15-30 degrees of hue at edges —
+      // adjacent on the colour wheel, not full rotation. The effect is a tonal
+      // breath: the existing pigment colour slightly warms or cools at boundaries.
+      // sin() bounds the phase to a small arc; mix() keeps base colour dominant.
+      if(uIrid>0.001){
+        float edgeMag=clamp(length(vec2(lxC,lyC))*5.0,0.0,1.0);
+        float nx=lxF*0.5+lxC*0.5;
+        float ny=lyF*0.5+lyC*0.5;
+        // Bounded rotation: max ±0.45 rad (~26 degrees) regardless of IR setting.
+        // sin() prevents unbounded phase — the psychedelic effect came from
+        // phase*iriStr accumulating to many radians.
+        float angle=sin(nx*2.2+ny*0.9+uTime*0.06)*0.45;
+        // Blend weight: 0 at bare background, peaks at pigment edges.
+        float weight=uIrid*clamp(edgeMag*0.9+luma(col)*0.25,0.0,0.65);
+        // Partial replacement: shifted colour mixed against original.
+        col=mix(col,hueShift(col,angle),weight);
+        // Cool-tinted luminosity edge — thin-film light addition at crystal boundaries.
+        col+=edgeMag*uIrid*0.05*vec3(0.85,0.92,1.0);
+
+        // ── Palette accent — vitiligo pigment model ────────────────────────
+        // FBM blob field drifts at near-zero speed: patches feel grown, not
+        // animated. Threshold + smoothstep gives them soft organic edges.
+        // Multiplied by edgeMag so accent concentrates at stripe transitions —
+        // the same structural zones where secondary pigment deposits in real shells.
+        // Scale shrinks at low IR (tight flecks) and expands at high IR (broad zones).
+        float patchScale=mix(8.0,2.2,uIrid);
+        float patchField=fbm(vUv*patchScale+uTime*0.006);
+        // Threshold also opens up with IR so coverage grows with the slider.
+        float patchLo=mix(0.55,0.38,uIrid);
+        float patchMask=smoothstep(patchLo,patchLo+0.18,patchField);
+        float accentStr=patchMask*edgeMag*uIrid*2.2;
+        col=mix(col,softLight(col,uAccent),clamp(accentStr,0.0,1.0));
+      }
+
+      // Surface relief: coarse normal maps stripe edges as physical ridges.
+      if(uRelief>0.001){
+        vec3 L=normalize(vec3(0.6,0.3,1.2));
+        float spec=pow(max(0.0,dot(coarseNormal,L)),18.0);
+        col+=spec*uRelief*1.4*vec3(1.0,0.96,0.88);
+      }
+
+      // Vignette
+      float d=length((vUv-0.5)*vec2(1.0,1.3));
+      col*=1.0-d*d*0.28;
+      gl_FragColor=vec4(clamp(col,0.0,1.0),1.0);
+    }`;
+
+  function compile(type,src){
+    const sh=gl.createShader(type);
+    gl.shaderSource(sh,src); gl.compileShader(sh);
+    if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS)){
+      console.error('Shader error:',gl.getShaderInfoLog(sh)); return null;
+    }
+    return sh;
+  }
+  const vsh=compile(gl.VERTEX_SHADER,vs);
+  const fsh=compile(gl.FRAGMENT_SHADER,fs);
+  if(!vsh||!fsh){gl=null;return;}
+
+  glProg=gl.createProgram();
+  gl.attachShader(glProg,vsh); gl.attachShader(glProg,fsh);
+  gl.linkProgram(glProg);
+  if(!gl.getProgramParameter(glProg,gl.LINK_STATUS)){
+    console.error('GL link error:',gl.getProgramInfoLog(glProg));
+    glProg=null; gl=null; return;
+  }
+
+  // Fullscreen quad: TRIANGLE_STRIP covering NDC [-1,1]²
+  const quad=new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+  const buf=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.bufferData(gl.ARRAY_BUFFER,quad,gl.STATIC_DRAW);
+  gl.useProgram(glProg);
+  const aPos=gl.getAttribLocation(glProg,'aPos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,0,0);
+
+  glLoc.uTex    =gl.getUniformLocation(glProg,'uTex');
+  glLoc.uTime   =gl.getUniformLocation(glProg,'uTime');
+  glLoc.uIrid   =gl.getUniformLocation(glProg,'uIrid');
+  glLoc.uRelief =gl.getUniformLocation(glProg,'uRelief');
+  glLoc.uTexSize=gl.getUniformLocation(glProg,'uTexSize');
+  glLoc.uAccent =gl.getUniformLocation(glProg,'uAccent');
+
+  glTex=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,glTex);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  // Placeholder 1×1 pixel so first draw doesn't error before upload
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,255]));
+}
+
+function uploadTexture(source){
+  if(!gl||!glTex) return;
+  gl.bindTexture(gl.TEXTURE_2D,glTex);
+  // UNPACK_FLIP_Y_WEBGL: canvas Y=0 is top; GL texture Y=0 is bottom.
+  // Flipping on upload makes vUv.y increase upward on screen, matching NDC.
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,source);
+}
+
+// GL animation loop — replaces strip compositor drawWave.
+// Per-pixel UV displacement: smooth, no strip boundaries, no moiré.
+function drawWaveGL(){
+  if(!gl||!glProg||!glTex) return;
+  _animPhase+=0.0075;
+  const p=readParams();
+  gl.viewport(0,0,glCanvas.width,glCanvas.height);
+  gl.useProgram(glProg);
+  gl.uniform1f(glLoc.uTime,_animPhase);
+  gl.uniform1f(glLoc.uIrid,p.IR||0);
+  gl.uniform1f(glLoc.uRelief,p.RL||0);
+  gl.uniform2f(glLoc.uTexSize,glCanvas.width,glCanvas.height);
+  const acc=PALETTE_ACCENTS[paletteIdx]||[0.5,0.5,0.5];
+  gl.uniform3f(glLoc.uAccent,acc[0],acc[1],acc[2]);
+  gl.uniform1i(glLoc.uTex,0);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D,glTex);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  _animRaf=requestAnimationFrame(drawWaveGL);
 }
 
 // ── Value / fractal noise ─────────────────────────────────────────────────
@@ -474,13 +861,36 @@ function stepKE54(a, b, c, s, Da, ra, ba, Db, rb, bb, sb, Dc, rc, sc_p, wrap, n,
   }
 }
 
+// KE=24: Activator-depletion (sp43 — wave termination)
+// Equations from Meinhardt 1995 / kaesve.nl function tc().
+// prod = s * substrate * (a² + ba) / (1 + sa*a²)
+// dA = prod - ra*a + Da*∇²a
+// dB = bb[i] - prod - rb*substrate + Db*∇²substrate    (substrate clamped ≥ 0)
+// bb is spatially varying (sinusoidal, from KI=7 modulation in sp43.prm).
+function stepKE24(a, b, s, Da, ra, ba, sa, Db, rb, bb_arr, wrap, n, dA, dB, nA, nB) {
+  ddFInto(a, dA, n, wrap);
+  ddFInto(b, dB, n, wrap);
+  for (let i = 0; i < n; i++) {
+    const ai=a[i], bi=b[i];
+    // kaesve tc(): l0 = a²/(1+sa*a²) + ba  (base rate added AFTER saturation)
+    const l0 = ai*ai / (1 + sa*ai*ai) + ba;
+    const prod = s[i] * bi * l0;
+    nA[i] = prod - ra*ai + Da*dA[i];
+    nB[i] = bb_arr[i] - prod - rb*bi + Db*dB[i];
+  }
+  for (let i = 0; i < n; i++) {
+    a[i] = Math.max(0, a[i] + nA[i]);
+    b[i] = Math.max(0, b[i] + nB[i]);
+  }
+}
+
 // ── SIMULATE ──────────────────────────────────────────────────────────────
 // Returns Float32Array of length IH*IW (activator values, row-major).
 // Simulation runs N cells wide × IH rows tall, then stretches to IW on output.
 function simulate(IW, IH, params) {
   const { BL, BO, TU, DR } = params;
   const N = Math.max(50, Math.round(params.N));
-  const stepCount = Math.max(5, Math.round(params.ST));
+  const stepCount = Math.max(1, Math.round(params.ST));
   const wrap = false; // zero-flux boundaries (kaesve default)
 
   // Preset chemistry parameters (verified from kaesve.nl source)
@@ -507,6 +917,22 @@ function simulate(IW, IH, params) {
       initA_eq:0.928, initA_noise:0.05,
       initB_eq:0.861, initB_noise:0.02,
       initC_eq:0.928,
+    },
+    { // sp43 — wave termination (KE=24, activator-depletion)
+      // Parameters from sp43.prm (kaesve.nl): DA=0.003, RA=0.1, BA=0.004, SA=0.05
+      //   DB=0, RB=0, BB=0.02, GA=1.0, GB=2.5
+      // KI=7 modulation: bb is SCALED each step by (1 + cos((i-K2)*π/K1)).
+      // This gives bb in range [0, 2*BB=0.04] — no negative values.
+      // SCALE+cos (not ADD+sin) is what kaesve's oe() actually does.
+      ke:24,
+      Da:0.003, ra:0.1, ba:0.004, sa:0.05,
+      Db:0.0,   rb:0.0, bb:0.02,
+      bbK1:65, bbK2:34, bbKT:390,  // wavelength, phase, original grid width
+      s:0.1,
+      // Init: activator at GA=1.0, substrate at GB=2.5 (both from .prm)
+      initA_eq:1.0,  initA_noise:0.05,
+      initB_eq:2.5,  initB_noise:0.05,
+      initC_eq:0,
     }
   ];
 
@@ -542,12 +968,36 @@ function simulate(IW, IH, params) {
 
   const { Da, ra, ba, sa, Db, rb, bb, sb, Dc, rc, sc } = p;
 
+  // For KE=24: build spatially-varying bb array using kaesve's KI=7 modulation.
+  // kaesve oe() applies: reset bb=BB, then SCALE by (1 + cos((i-K2)*π/K1)).
+  // K1/K2 are in original-grid cell units; scale proportionally to our N-cell grid.
+  // Result: bb[i] = BB * (1 + cos((i - phase)*π/lambda)), range [0, 2*BB].
+  const bb_arr = new Float64Array(N);
+  if (p.ke === 24) {
+    const lambda = p.bbK1 * N / p.bbKT;          // wavelength scaled to our grid
+    const phase  = p.bbK2 * N / p.bbKT;          // phase scaled to our grid
+    // Floor at 25% of BB so every x-position has substrate supply and fires waves.
+    // Without a floor, dead zones (cos = -1 → bb=0) produce blank vertical strips.
+    // The ratio bb_max/bb_floor ≈ 8 means low-BB zones fire ~8x less often than
+    // peaks — that sparse-to-dense gradient IS the wave-termination arch structure.
+    const bb_floor = bb * 0.25;
+    const bb_range = bb * 2 - bb_floor;          // range = 1.75 × BB
+    for (let i = 0; i < N; i++) {
+      const cv = Math.cos((i - phase) * Math.PI / lambda);
+      bb_arr[i] = bb_floor + bb_range * (1 + cv) * 0.5;
+    }
+  } else {
+    bb_arr.fill(bb);
+  }
+
   // Row-by-row simulation: each canvas row = one time slice
   const simRows = [];
   for (let row = 0; row < IH; row++) {
     for (let step = 0; step < stepCount; step++) {
       if (p.ke === 51) {
         stepKE51(act, st_b, st_c, s_arr, Da, ra, ba, sa, Db, rb, bb, sb, Dc, rc, sc, wrap, N, dA, dB, dC, nA, nB, nC);
+      } else if (p.ke === 24) {
+        stepKE24(act, st_b, s_arr, Da, ra, ba, sa, Db, rb, bb_arr, wrap, N, dA, dB, nA, nB);
       } else {
         stepKE54(act, st_b, st_c, s_arr, Da, ra, ba, Db, rb, bb, sb, Dc, rc, sc, wrap, N, dA, dB, dC, nA, nB, nC);
       }
@@ -716,10 +1166,15 @@ function render(){
       let gMin=Infinity,gMax=-Infinity;
       for(let i=0;i<perturbedRaw.length;i++){if(perturbedRaw[i]<gMin)gMin=perturbedRaw[i];if(perturbedRaw[i]>gMax)gMax=perturbedRaw[i];}
 
+
       const pal=PALETTES[paletteIdx];
-      // Inverted palette swaps background to warm paper white
-      const effectivePal=invertStates[paletteIdx]?{...pal,bg:PAPER}:pal;
-      const bgColor=invertStates[paletteIdx]?PAPER:pal.bg;
+      const bgColor=invertState?DARK_INV:PAPER;
+      // In inverted mode, replace the bright 'light' stop with a dark-tinted
+      // version of mid — eliminates the white halo that appears between the
+      // dark background and the coloured stripe body.
+      const effectivePal=invertState
+        ? {...pal, bg:DARK_INV, light:pal.mid.map((v,i)=>Math.round(v*0.45+DARK_INV[i]*0.55))}
+        : {...pal, bg:PAPER};
       document.getElementById('swatch-wrap').style.background=`rgb(${bgColor.join(',')})`;
 
       // Build a 256-entry LUT: norm byte → [r,g,b] + t value for grain mask.
@@ -775,71 +1230,40 @@ function render(){
         }
       }
 
-      // Post-process blur. Reuse _animBase as the intermediate buffer —
-      // it holds the pre-blur image for the animation loop to sample from.
+      // Store rendered pixels in _animBase, then upload to GL texture.
+      // The GL animation loop handles blur + warp + effects each frame.
       if(!_animBase||_animBase.width!==IW||_animBase.height!==IH)
         _animBase=new OffscreenCanvas(IW,IH);
       _animBase.getContext('2d').putImageData(imgData,0,0);
       _animBgCss=`rgb(${bgColor[0]},${bgColor[1]},${bgColor[2]})`;
-      ctx.filter=`blur(${(0.55*dpr).toFixed(2)}px)`;
-      ctx.drawImage(_animBase,0,0);
-      ctx.filter='none';
+
+      if(gl){
+        uploadTexture(_animBase);
+      } else {
+        // Fallback: 2D canvas blur (WebGL unavailable)
+        ctx.filter=`blur(${(0.55*dpr).toFixed(2)}px)`;
+        ctx.drawImage(_animBase,0,0);
+        ctx.filter='none';
+      }
 
       overlay.classList.add('hidden');
       const label=simMs>0?`${simMs}ms sim · `:' cached · ';
       document.getElementById('status').textContent=label+`${IW}×${IH}`;
 
-      // ── HAND OFF TO ANIMATION LOOP ────────────────────────────────────
+      // ── HAND OFF TO GL ANIMATION LOOP ─────────────────────────────────
       _animIW=IW; _animIH=IH;
-      _animBlur=(0.55*dpr);
-      if(!_animOff||_animOff.width!==IW||_animOff.height!==IH)
-        _animOff=new OffscreenCanvas(IW,IH);
-      _animRaf=requestAnimationFrame(drawWave);
+      _animRaf=requestAnimationFrame(gl ? drawWaveGL : drawWave);
     });
   },80);
 }
 
-// ── ANIMATION ─────────────────────────────────────────────────────────────
-// Ocean-refraction warp: two overlapping sine waves shift each row's sample
-// position horizontally by a few pixels. Primary wave drifts slowly "upstream"
-// (against the growth direction); secondary wave at a different frequency and
-// opposing phase drift breaks mechanical periodicity. No grain in anim frames —
-// grain in JS at 60fps reads as static/glitch. The static render's grain
-// provides texture; the animation adds only organic, slow movement.
+// ── 2D CANVAS FALLBACK ANIMATION (when WebGL unavailable) ─────────────────
 function drawWave(){
   if(!_animBase) return;
-  // ~14s per primary cycle at 60fps
   _animPhase+=0.0075;
-
-  const IW=_animIW, IH=_animIH;
-  const offCtx=_animOff.getContext('2d');
-
-  // Fill bg first so edges shifted off-canvas don't show transparent holes
-  offCtx.fillStyle=_animBgCss;
-  offCtx.fillRect(0,0,IW,IH);
-
-  // Draw vertical strips of the base image, each offset vertically by a
-  // sine function of x-position + time. GPU-composited, no per-pixel JS.
-  // Primary wave (1.5 cycles across width) + incommensurable secondary.
-  const STRIP=3; // physical pixels per strip
-  for(let px=0;px<IW;px+=STRIP){
-    const xF=px/IW;
-    const dy=Math.round(
-      14*Math.sin(xF*Math.PI*3.0+_animPhase)
-     + 5*Math.sin(xF*Math.PI*5.1-_animPhase*0.71)
-    );
-    const sw=Math.min(STRIP,IW-px);
-    offCtx.drawImage(_animBase, px,0,sw,IH, px,dy,sw,IH);
-    // Clamp edges: stretch the boundary row to fill any gap left by the shift,
-    // same as CSS background-clamp. Blur makes the stretch invisible.
-    if(dy>0) offCtx.drawImage(_animBase, px,0,sw,1, px,0,sw,dy);
-    if(dy<0) offCtx.drawImage(_animBase, px,IH-1,sw,1, px,IH+dy,sw,-dy);
-  }
-
-  ctx.filter=`blur(${_animBlur.toFixed(2)}px)`;
-  ctx.drawImage(_animOff,0,0);
+  ctx.filter='blur(1px)';
+  ctx.drawImage(_animBase,0,0);
   ctx.filter='none';
-
   _animRaf=requestAnimationFrame(drawWave);
 }
 
@@ -851,25 +1275,49 @@ function readParams(){
   return {
     PR: currentPreset,
     N:  g('N'),  ST: g('ST'),
-    BL: g('BL'), BO: g('RO'),  // BO still feeds bloom in simulate (harmless)
+    BL: g('BL'), BO: g('RO'),
     TU: g('TU'), DR: g('DR'),
     GA: g('GA'), TH: g('TH'), GR: g('GR'), RO: g('RO'), PS: g('PS'),
+    IR: g('IR'), RL: g('RL'),
   };
 }
 
-['N','ST','BL','RO','TU','DR','GA','TH','GR','PS'].forEach(id=>{
+// IR and RL are pure shader uniforms — GL loop reads them each frame.
+// No re-render needed; just update the display value.
+const GL_ONLY_PARAMS = new Set(['IR','RL']);
+
+function updateFill(sl){
+  const pct=((sl.value-sl.min)/(sl.max-sl.min)*100).toFixed(1)+'%';
+  sl.style.setProperty('--fill',pct);
+}
+
+['N','ST','BL','RO','TU','DR','GA','TH','GR','PS','IR','RL'].forEach(id=>{
   const sl=document.getElementById('s-'+id);
   const vl=document.getElementById('v-'+id);
+  updateFill(sl); // initialise fill position on load
   sl.addEventListener('input',()=>{
     const dec=sl.step.includes('.')?sl.step.split('.')[1].length:0;
     vl.textContent=parseFloat(sl.value).toFixed(dec);
-    render();
+    updateFill(sl);
+    if(!GL_ONLY_PARAMS.has(id)) render();
   });
 });
 
 // Preset buttons
-const presetBtns = [document.getElementById('btn-sp51a'), document.getElementById('btn-sp512')];
-const PRESET_STEPS = [100, 20];
+const presetBtns = [document.getElementById('btn-sp51a'), document.getElementById('btn-sp512'), document.getElementById('btn-sp43')];
+const PRESET_STEPS = [100, 20, 1];
+// Per-preset render defaults: [TH, GA]
+// sp43: background activator is near-zero (bb leak only), spikes are 10-50×.
+// Low TH (0.1) clips the basal noise floor, GA=0.6 pushes mid-tones toward white
+// so only the actual wave-front spike renders as a clean dark line.
+const PRESET_RENDER = [[0.30, 1.4], [0.30, 1.4], [0.10, 0.6]];
+
+function snapSlider(id, val){
+  const sl=document.getElementById('s-'+id);
+  sl.value=val;
+  document.getElementById('v-'+id).textContent=parseFloat(val).toFixed(sl.step.includes('.')?sl.step.split('.')[1].length:0);
+  updateFill(sl);
+}
 
 presetBtns.forEach((btn, idx) => {
   btn.addEventListener('click', () => {
@@ -877,61 +1325,65 @@ presetBtns.forEach((btn, idx) => {
     presetBtns.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     // Sync steps slider to preset default
-    const stSlider = document.getElementById('s-ST');
-    stSlider.value = PRESET_STEPS[idx];
-    document.getElementById('v-ST').textContent = PRESET_STEPS[idx];
+    snapSlider('ST', PRESET_STEPS[idx]);
+    // Sync render sliders to per-preset defaults
+    snapSlider('TH', PRESET_RENDER[idx][0]);
+    snapSlider('GA', PRESET_RENDER[idx][1]);
     render();
   });
 });
 
-// Invert button — per-palette state, survives palette switching
-const btnInvert=document.getElementById('btn-invert');
+// Invert toggle — universal, persists across palette switches
+const btnInvert=document.getElementById('chk-invert');
 function syncInvertButton(){
-  btnInvert.classList.toggle('active',invertStates[paletteIdx]);
-  // Update swatch dot indicator
-  document.querySelectorAll('.swatch').forEach((sw,i)=>{
-    sw.classList.toggle('inverted',invertStates[i]);
-  });
+  btnInvert.checked=invertState;
 }
-btnInvert.addEventListener('click',()=>{
-  invertStates[paletteIdx]=!invertStates[paletteIdx];
-  syncInvertButton(); render();
+btnInvert.addEventListener('change',()=>{
+  invertState=btnInvert.checked;
+  render();
 });
 
-// Info modal
-const infoModal=document.getElementById('info-modal');
-document.getElementById('btn-info').addEventListener('click',()=>infoModal.classList.add('open'));
-document.getElementById('info-close').addEventListener('click',()=>infoModal.classList.remove('open'));
-infoModal.addEventListener('click',e=>{if(e.target===infoModal)infoModal.classList.remove('open');});
+// Info card — open on load, dismissed by close button or first slider touch
+const infoBox=document.getElementById('info-box');
+function dismissInfo(){
+  infoBox.classList.add('hidden');
+}
+document.getElementById('btn-info').addEventListener('click',()=>infoBox.classList.toggle('hidden'));
+document.getElementById('info-close').addEventListener('click',dismissInfo);
+// First slider interaction dismisses the card
+document.querySelectorAll('input[type=range]').forEach(s=>s.addEventListener('input',dismissInfo));
 
 document.getElementById('btn-save').addEventListener('click',()=>{
   const a=document.createElement('a');
   a.download=`mantlecreep-${Date.now()}.png`;
-  a.href=canvas.toDataURL('image/png');
+  // Save from GL canvas when available (includes all shader effects)
+  a.href=(gl ? glCanvas : canvas).toDataURL('image/png');
   a.click();
 });
 
 window.addEventListener('resize',()=>{_rawSimKey=''; render();});
 
 // ── DRAGGABLE CARDS ───────────────────────────────────────────────────────
-// Default positions as fractions of viewport — intentionally non-columnar.
-// Default positions: clustered left, staggered to avoid the title block
-// (top ~160px) and bottom bar (~80px from bottom). Cards are ~85px tall.
-// x stays 3–16% so nothing crowds the canvas centre.
+// 48px page margin, 20px gaps. Cards 330×130px. Model tabs at top:48, h:24.
+// Cards start at top: 48+24+20=92. Cols at: 48, 48+350=398, 48+700=748.
+const GRID_COL = [48, 298, 548];
+const GRID_ROW = [92, 203, 314, 425];
 const DEFAULT_POSITIONS = {
-  'ctrl-N':  [0.03, 0.20],
-  'ctrl-ST': [0.11, 0.29],
-  'ctrl-BL': [0.03, 0.38],
-  'ctrl-RO': [0.12, 0.47],
-  'ctrl-GR': [0.04, 0.55],
-  'ctrl-PS': [0.13, 0.55],
-  'ctrl-TU': [0.03, 0.63],
-  'ctrl-DR': [0.12, 0.63],
-  'ctrl-GA': [0.03, 0.72],
-  'ctrl-TH': [0.13, 0.72],
+  'ctrl-N':  {left:GRID_COL[0], top:GRID_ROW[0]},
+  'ctrl-ST': {left:GRID_COL[1], top:GRID_ROW[0]},
+  'ctrl-BL': {left:GRID_COL[2], top:GRID_ROW[0]},
+  'ctrl-RO': {left:GRID_COL[0], top:GRID_ROW[1]},
+  'ctrl-GR': {left:GRID_COL[1], top:GRID_ROW[1]},
+  'ctrl-PS': {left:GRID_COL[2], top:GRID_ROW[1]},
+  'ctrl-TU': {left:GRID_COL[0], top:GRID_ROW[2]},
+  'ctrl-DR': {left:GRID_COL[1], top:GRID_ROW[2]},
+  'ctrl-GA': {left:GRID_COL[2], top:GRID_ROW[2]},
+  'ctrl-TH': {left:GRID_COL[0], top:GRID_ROW[3]},
+  'ctrl-IR': {left:GRID_COL[1], top:GRID_ROW[3]},
+  'ctrl-RL': {left:GRID_COL[2], top:GRID_ROW[3]},
 };
 
-const LAYOUT_KEY = 'mantlecreep-layout-v3';
+const LAYOUT_KEY = 'mantlecreep-layout-v9';
 let topZ = 10;
 
 function saveLayout(){
@@ -949,9 +1401,18 @@ function applyLayout(saved){
       c.style.left=saved[c.id].left;
       c.style.top=saved[c.id].top;
     } else if(def){
-      c.style.left=Math.round(def[0]*window.innerWidth)+'px';
-      c.style.top =Math.round(def[1]*window.innerHeight)+'px';
+      c.style.left=def.left+'px';
+      c.style.top=def.top+'px';
     }
+  });
+  // Position tooltip just below the card grid
+  requestAnimationFrame(()=>{
+    let maxBottom=0;
+    document.querySelectorAll('.ctrl').forEach(c=>{
+      const t=parseInt(c.style.top)||0;
+      maxBottom=Math.max(maxBottom,t+c.offsetHeight);
+    });
+    document.getElementById('tooltip-box').style.top=(maxBottom+6)+'px';
   });
 }
 
@@ -962,6 +1423,7 @@ function resetLayout(){
 
 // Load saved or apply defaults
 applyLayout(JSON.parse(localStorage.getItem(LAYOUT_KEY)||'null'));
+applyAccent(PALETTES[paletteIdx]);
 
 // Wire drag on each card's label
 document.querySelectorAll('.ctrl').forEach(card=>{
@@ -993,6 +1455,33 @@ document.querySelectorAll('.ctrl').forEach(card=>{
 
 document.getElementById('btn-reset-layout').addEventListener('click', resetLayout);
 
+// Accent dot injected into each card — picks up --rust palette colour
+const CTRL_ORDER = ['ctrl-N','ctrl-ST','ctrl-BL','ctrl-RO','ctrl-GR','ctrl-PS',
+                    'ctrl-TU','ctrl-DR','ctrl-GA','ctrl-TH','ctrl-IR','ctrl-RL'];
+CTRL_ORDER.forEach(id=>{
+  const el=document.getElementById(id);
+  if(!el) return;
+  const n=document.createElement('span');
+  n.className='ctrl-num';
+  el.appendChild(n);
+});
+
+// ── PERSISTENT TOOLTIP BOX ────────────────────────────────────────────────
+// On hover, reads .ctrl-tip content and displays it in the fixed #tooltip-box.
+const tipBox = document.getElementById('tooltip-box');
+document.querySelectorAll('.ctrl').forEach(card => {
+  const tip = card.querySelector('.ctrl-tip');
+  if (!tip) return;
+  card.addEventListener('mouseenter', () => {
+    tipBox.textContent = tip.textContent.trim();
+    tipBox.classList.add('visible');
+  });
+  card.addEventListener('mouseleave', () => {
+    tipBox.classList.remove('visible');
+  });
+});
+
+initGL();
 syncInvertButton();
 render();
 </script>

@@ -1,0 +1,7 @@
+# Local IDE/tool config
+.claude/
+.mcp.json
+
+# OS files
+.DS_Store
+Thumbs.db
