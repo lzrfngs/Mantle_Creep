@@ -7,7 +7,9 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&family=Inter:wght@400;900&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=EB+Garamond:ital,wght@0,400;1,400&display=swap');
   *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-  :root { --bg:#0e0e0e; --panel:#111; --border:#1c1c1c; --text:#666; --dim:#2e2e2e; --accent:#888; --rust:#8C3A1A; --cream:#D4C4AE; }
+  :root { --bg:#0e0e0e; --panel:#111; --border:#1c1c1c; --text:#666; --dim:#737373; --accent:#888; --rust:#8C3A1A; --cream:#D4C4AE;
+    /* UI scale — overwritten by JS based on screen width (see uiScale below) */
+    --ui-pad:48px; --card-w:230px; --card-h:91px; --card-name:20px; }
 
   body {
     background:var(--bg); color:var(--text);
@@ -29,7 +31,7 @@
 
   /* ── Header — info button top-right ── */
   header {
-    position:fixed; top:48px; right:48px; z-index:30;
+    position:fixed; top:var(--ui-pad); right:var(--ui-pad); z-index:30;
     display:flex; align-items:flex-start;
     pointer-events:none;
   }
@@ -48,9 +50,9 @@
   }
   #btn-info:hover { color:#bbb; border-color:#555; }
 
-  /* ── Model picker tabs — top-left, 48px from edges ── */
+  /* ── Model picker tabs — top-left, page margin from edges ── */
   #model-tabs {
-    position:fixed; top:48px; left:48px; z-index:30;
+    position:fixed; top:var(--ui-pad); left:var(--ui-pad); z-index:30;
     display:flex; pointer-events:none;
   }
   #model-tabs * { pointer-events:auto; }
@@ -67,7 +69,7 @@
 
   /* ── Floating control cards ── */
   .ctrl {
-    position:fixed; width:230px; height:91px; z-index:10; user-select:none;
+    position:fixed; width:var(--card-w); height:var(--card-h); z-index:10; user-select:none;
     background:#0d0d0d;
     padding:8px 10px 10px;
     border-radius:0;
@@ -89,7 +91,7 @@
 
   /* Label — large bold display, the drag handle */
   .ctrl-name {
-    display:block; font-size:20px; line-height:1.1; text-transform:uppercase;
+    display:block; font-size:var(--card-name); line-height:1.1; text-transform:uppercase;
     color:#fff; cursor:grab;
     font-family:'Inter',sans-serif; font-weight:900;
     letter-spacing:-0.01em;
@@ -128,8 +130,8 @@
 
   /* Persistent tooltip box — sits below card grid, position set by JS */
   #tooltip-box {
-    position:fixed; left:48px;
-    width:230px;
+    position:fixed; left:var(--ui-pad);
+    width:var(--card-w);
     background:#0d0d0d; border:1px solid rgba(255,255,255,0.1);
     padding:10px 12px;
     font-size:9px; line-height:1.75; color:#fff;
@@ -158,7 +160,7 @@
     display:flex; align-items:center; gap:24px;
     pointer-events:none;
     background:rgba(10,10,10,0.92); backdrop-filter:blur(8px);
-    -webkit-backdrop-filter:blur(8px); padding:0 48px;
+    -webkit-backdrop-filter:blur(8px); padding:0 var(--ui-pad);
     height:50px;
   }
   #bottom > * { pointer-events:auto; }
@@ -207,17 +209,18 @@
 
   /* ── Info card — fixed top-right, open on load ── */
   #info-box {
-    position:fixed; top:48px; right:48px; z-index:40;
-    width:680px; max-height:calc(100vh - 48px); overflow-y:auto;
+    position:fixed; top:var(--ui-pad); right:var(--ui-pad); z-index:40;
+    width:min(420px, calc(100vw - 2*var(--ui-pad)));
+    max-height:calc(100vh - 2*var(--ui-pad)); overflow-y:auto;
     background:rgba(8,4,2,0.92);
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-    border-radius:3px; padding:24px 24px 20px;
+    border-radius:3px; padding:20px 20px 16px;
     transition:opacity 0.25s, visibility 0.25s;
   }
   #info-box.hidden { opacity:0; visibility:hidden; pointer-events:none; }
-  #info-box h2 { font-family:'EB Garamond',serif; font-size:32px; font-weight:400; font-style:italic; color:#fff; margin-bottom:16px; }
-  #info-box p  { font-family:'EB Garamond',serif; font-size:22px; line-height:1.6; color:var(--text); margin-bottom:14px; }
-  #info-box p:last-child { margin-bottom:0; color:var(--dim); font-size:18px; }
+  #info-box h2 { font-family:'EB Garamond',serif; font-size:clamp(18px,1.9vw,26px); font-weight:400; font-style:italic; color:#fff; margin-bottom:12px; }
+  #info-box p  { font-family:'EB Garamond',serif; font-size:clamp(12px,1.05vw,15px); line-height:1.5; color:var(--text); margin-bottom:10px; }
+  #info-box p:last-child { margin-bottom:0; }
   #info-close { position:absolute; top:12px; right:14px; background:none; border:none; color:var(--dim); font-family:inherit; font-size:18px; cursor:pointer; line-height:1; padding:0; }
   #info-close:hover { color:var(--accent); }
   #info-box em { color:var(--accent); font-style:italic; }
@@ -470,6 +473,16 @@ const overlay=document.getElementById('overlay');
 // Render-only params (no resim needed): GA, TH, GR, palette, invert.
 let _rawCache = null, _rawSimKey = '';
 let _roughCache = null, _roughSizeKey = '';
+
+// ── PERF CACHES (Tier 1) ───────────────────────────────────────────────────
+// GL animation loop reads these every frame instead of touching the DOM.
+let _glParams = { IR:0, RL:0 };
+// Reusable fractal noise fields — fixed seeds, built once on first use.
+let _turbField=null, _driftField=null, _roughFieldX=null, _roughFieldY=null;
+// Simulation scratch arrays, reused across renders (rebuilt only when N changes).
+let _simScratch=null, _simScratchN=0;
+// Gaussian blur kernel cache, keyed by sigma (kernel depends only on sigma).
+const _blurKernels=new Map();
 
 // ── ANIMATION STATE ──────────────────────────────────────────────────────
 let _animRaf    = null;
@@ -753,7 +766,7 @@ function uploadTexture(source){
 function drawWaveGL(){
   if(!gl||!glProg||!glTex) return;
   _animPhase+=0.0075;
-  const p=readParams();
+  const p=_glParams; // cached — no per-frame DOM reads
   gl.viewport(0,0,glCanvas.width,glCanvas.height);
   gl.useProgram(glProg);
   gl.uniform1f(glLoc.uTime,_animPhase);
@@ -792,9 +805,15 @@ function makeFractal(seed,oct=4){
 function blurRow(src,sigma){
   if(sigma<0.3) return src;
   const N=src.length, r=Math.ceil(sigma*2.8);
-  const k=new Float64Array(2*r+1); let sum=0;
-  for(let i=-r;i<=r;i++){const w=Math.exp(-i*i/(2*sigma*sigma));k[i+r]=w;sum+=w;}
-  for(let i=0;i<k.length;i++) k[i]/=sum;
+  // Kernel depends only on sigma — build once, reuse across rows and renders.
+  const key=sigma.toFixed(4);
+  let k=_blurKernels.get(key);
+  if(!k){
+    k=new Float64Array(2*r+1); let sum=0;
+    for(let i=-r;i<=r;i++){const w=Math.exp(-i*i/(2*sigma*sigma));k[i+r]=w;sum+=w;}
+    for(let i=0;i<k.length;i++) k[i]/=sum;
+    _blurKernels.set(key,k);
+  }
   const out=new Float32Array(N);
   for(let i=0;i<N;i++){let v=0;for(let j=0;j<k.length;j++)v+=src[(i+j-r+N)%N]*k[j];out[i]=v;}
   return out;
@@ -958,13 +977,16 @@ function simulate(IW, IH, params) {
   // Source density (uniform)
   const s_arr = new Float64Array(N).fill(p.s);
 
-  // Scratch arrays (pre-allocated to avoid GC pressure in inner loop)
-  const dA = new Float64Array(N);
-  const dB = new Float64Array(N);
-  const dC = new Float64Array(N);
-  const nA = new Float64Array(N);
-  const nB = new Float64Array(N);
-  const nC = new Float64Array(N);
+  // Scratch arrays — reused across renders (rebuilt only when N changes).
+  // Each is fully overwritten every step before use, so stale values are safe.
+  if(!_simScratch || _simScratchN!==N){
+    _simScratch={
+      dA:new Float64Array(N), dB:new Float64Array(N), dC:new Float64Array(N),
+      nA:new Float64Array(N), nB:new Float64Array(N), nC:new Float64Array(N),
+    };
+    _simScratchN=N;
+  }
+  const {dA,dB,dC,nA,nB,nC}=_simScratch;
 
   const { Da, ra, ba, sa, Db, rb, bb, sb, Dc, rc, sc } = p;
 
@@ -1019,8 +1041,9 @@ function simulate(IW, IH, params) {
   }
 
   // Scatter to output: stretch N→IW, apply turbulence + drift warp
-  const turbField  = TU > 0 ? makeFractal(3141) : null;
-  const driftField = DR > 0 ? makeFractal(2718) : null;
+  // Fixed-seed fields built once and reused across renders.
+  const turbField  = TU > 0 ? (_turbField  ||= makeFractal(3141)) : null;
+  const driftField = DR > 0 ? (_driftField ||= makeFractal(2718)) : null;
   const turbAmp  = TU * 50;
   const driftAmp = DR * N * 0.18;
 
@@ -1142,7 +1165,7 @@ function render(){
       // since it depends only on geometry, not simulation params.
       const roughSizeKey=`${simW}-${simH}`;
       if(RO>0.01 && _roughSizeKey!==roughSizeKey){
-        const rfX=makeFractal(6174), rfY=makeFractal(9753);
+        const rfX=(_roughFieldX ||= makeFractal(6174)), rfY=(_roughFieldY ||= makeFractal(9753));
         _roughCache=new Float32Array(simW*simH);
         for(let sy=0;sy<simH;sy++)
           for(let sx=0;sx<simW;sx++)
@@ -1299,8 +1322,22 @@ function updateFill(sl){
     const dec=sl.step.includes('.')?sl.step.split('.')[1].length:0;
     vl.textContent=parseFloat(sl.value).toFixed(dec);
     updateFill(sl);
+    if(id==='IR'||id==='RL') _glParams[id]=parseFloat(sl.value); // feed GL loop cache
     if(!GL_ONLY_PARAMS.has(id)) render();
   });
+});
+// Seed the GL-loop param cache from initial slider values.
+_glParams.IR=+document.getElementById('s-IR').value;
+_glParams.RL=+document.getElementById('s-RL').value;
+
+// Pause the animation loop when the tab is hidden; resume on return.
+// Stops wasted GPU/CPU at idle without changing any visuals.
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){
+    if(_animRaf){cancelAnimationFrame(_animRaf);_animRaf=null;}
+  } else if(!_animRaf && _animBase){
+    _animRaf=requestAnimationFrame(gl?drawWaveGL:drawWave);
+  }
 });
 
 // Preset buttons
@@ -1383,7 +1420,7 @@ const DEFAULT_POSITIONS = {
   'ctrl-RL': {left:GRID_COL[2], top:GRID_ROW[3]},
 };
 
-const LAYOUT_KEY = 'mantlecreep-layout-v9';
+const LAYOUT_KEY = 'mantlecreep-layout-v10';
 let topZ = 10;
 
 function saveLayout(){
