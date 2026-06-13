@@ -229,7 +229,7 @@
   #info-box em { color:var(--accent); font-style:italic; }
 </style>
 </head>
-<body class="controls-hidden">
+<body>
 
 <div id="model-tabs">
   <button id="btn-sp51a" class="active">SP51A</button>
@@ -1424,10 +1424,9 @@ window.addEventListener('resize',()=>{_rawSimKey=''; render();});
 applyAccent(PALETTES[paletteIdx]);
 
 // ── CONTROLS VISIBILITY ───────────────────────────────────────────────────
-// Controls are hidden on load so the canvas reads as a finished piece.
-// The toggle reveals the draggable cards for fine-tuning.
+// Panel is shown on load; the toggle lets you hide it for a clean view.
 const btnControls=document.getElementById('btn-controls');
-let controlsVisible=false;
+let controlsVisible=true;
 function syncControls(){
   document.body.classList.toggle('controls-hidden',!controlsVisible);
   btnControls.classList.toggle('active',controlsVisible);
