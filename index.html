@@ -8,8 +8,7 @@
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&family=Inter:wght@400;900&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=EB+Garamond:ital,wght@0,400;1,400&display=swap');
   *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
   :root { --bg:#0e0e0e; --panel:#111; --border:#1c1c1c; --text:#666; --dim:#737373; --accent:#888; --rust:#8C3A1A; --cream:#D4C4AE;
-    /* UI scale — overwritten by JS based on screen width (see uiScale below) */
-    --ui-pad:48px; --card-w:230px; --card-h:91px; --card-name:20px; }
+    --ui-pad:48px; }
 
   body {
     background:var(--bg); color:var(--text);
@@ -67,81 +66,81 @@
   #model-tabs button.active { background:#111; color:#fff; }
   #model-tabs button:hover:not(.active) { color:#888; }
 
-  /* ── Floating control cards ── */
-  .ctrl {
-    position:fixed; width:var(--card-w); height:var(--card-h); z-index:10; user-select:none;
-    background:#0d0d0d;
-    padding:8px 10px 10px;
-    border-radius:0;
-    display:flex; flex-direction:column;
+  /* ── Compact control panel — docked left, hidden by default ── */
+  #panel {
+    position:fixed; left:16px; top:50%; transform:translateY(-50%);
+    z-index:20; width:206px;
+    max-height:calc(100vh - 96px); overflow-y:auto;
+    background:rgba(9,9,9,0.82);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    border:1px solid rgba(255,255,255,0.09);
+    padding:4px 4px 6px; user-select:none;
   }
-  .ctrl:hover { z-index:20; }
-
-  /* Controls hidden by default — the artwork is the hero. Toggle reveals them. */
-  body.controls-hidden .ctrl,
+  #panel::-webkit-scrollbar { width:0; }
+  #panel-head {
+    font-family:'IBM Plex Mono',monospace; font-size:8px; letter-spacing:0.22em;
+    text-transform:uppercase; color:#5a5a5a; padding:6px 8px 8px;
+  }
+  body.controls-hidden #panel,
   body.controls-hidden #tooltip-box { display:none !important; }
 
-  /* Accent dot — hidden in new layout */
+  /* Each control — compact row: name + value on top, thin slider below */
+  .ctrl {
+    display:flex; flex-wrap:wrap; align-items:baseline;
+    padding:6px 8px 7px;
+    border-top:1px solid rgba(255,255,255,0.05);
+  }
+  #panel-head + .ctrl { border-top:0; }
   .ctrl-num { display:none; }
 
-  /* Value — small monospace, appears above label */
-  .ctrl-val {
-    display:block; font-size:9px; line-height:1;
-    color:#555; font-family:'IBM Plex Mono',monospace;
-    font-variant-numeric:tabular-nums;
-    font-weight:300; letter-spacing:0.04em;
-    margin-bottom:4px; order:0;
-  }
-
-  /* Label — large bold display, the drag handle */
   .ctrl-name {
-    display:block; font-size:var(--card-name); line-height:1.1; text-transform:uppercase;
-    color:#fff; cursor:grab;
-    font-family:'Inter',sans-serif; font-weight:900;
-    letter-spacing:-0.01em;
-    order:1;
+    order:0; flex:1 1 auto;
+    font-family:'Inter',sans-serif; font-weight:700; font-size:9px;
+    letter-spacing:0.02em; text-transform:uppercase; color:#cfcfcf; line-height:1.15;
   }
-  .ctrl-name:active { cursor:grabbing; }
+  .ctrl-val {
+    order:1; flex:0 0 auto; text-align:right; padding-left:8px;
+    font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums;
+    font-size:9px; font-weight:400; color:#fff;
+  }
 
-  /* Filled track — pinned to bottom via margin-top:auto */
   input[type=range] {
     -webkit-appearance:none; appearance:none;
-    width:100%; height:3px;
+    order:2; flex:0 0 100%; width:100%; height:2px; margin-top:6px;
+    display:block; cursor:pointer; outline:none; border-radius:0;
     background:linear-gradient(to right,
       var(--rust) 0%, var(--rust) var(--fill,0%),
-      #2a2a2a var(--fill,0%), #2a2a2a 100%);
-    outline:none; cursor:pointer; display:block;
-    border-radius:0; order:2; margin-top:auto;
+      #2e2e2e var(--fill,0%), #2e2e2e 100%);
   }
   input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance:none; width:2px; height:16px;
-    background:#fff; border-radius:0; cursor:pointer;
-    margin-top:-6.5px;
+    -webkit-appearance:none; width:2px; height:11px;
+    background:#fff; border-radius:0; cursor:pointer; margin-top:-4.5px;
   }
   input[type=range]::-moz-range-thumb {
-    width:2px; height:16px;
+    width:2px; height:11px;
     background:#fff; border-radius:0; cursor:pointer; border:none;
   }
   input[type=range]::-moz-range-track {
-    height:3px;
+    height:2px;
     background:linear-gradient(to right,
       var(--rust) 0%, var(--rust) var(--fill,0%),
-      #2a2a2a var(--fill,0%), #2a2a2a 100%);
+      #2e2e2e var(--fill,0%), #2e2e2e 100%);
   }
 
-  /* Per-card tooltip spans — hidden; content read by JS into #tooltip-box */
+  /* Per-row tooltip spans — hidden; content read by JS into #tooltip-box */
   .ctrl-tip { display:none !important; }
 
-  /* Persistent tooltip box — sits below card grid, position set by JS */
+  /* Tooltip — appears beside the panel on hover */
   #tooltip-box {
-    position:fixed; left:var(--ui-pad);
-    width:var(--card-w);
-    background:#0d0d0d; border:1px solid rgba(255,255,255,0.1);
-    padding:10px 12px;
-    font-size:9px; line-height:1.75; color:#fff;
+    position:fixed; left:234px; top:50%; transform:translateY(-50%);
+    width:208px;
+    background:rgba(9,9,9,0.9); border:1px solid rgba(255,255,255,0.1);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    padding:11px 13px;
+    font-size:9px; line-height:1.7; color:#dcdcdc;
     font-family:'IBM Plex Mono',monospace;
     z-index:25; pointer-events:none;
-    opacity:0; transition:opacity 0.18s;
+    opacity:0; transition:opacity 0.15s;
   }
   #tooltip-box.visible { opacity:1; }
 
@@ -244,7 +243,7 @@
 
 <div id="spine">sp51a · sp512 · sp43 · reaction-diffusion · meinhardt</div>
 
-<!-- Floating control cards — positioned by JS, draggable -->
+<!-- Compact control panel -->
 
 <div id="info-box">
     <button id="info-close">×</button>
@@ -256,6 +255,8 @@
     <p><em>sp43</em> — Wave termination. Activator-depletion with sinusoidally varying substrate supply. Oscillating wave fronts propagate through rich zones and collapse where substrate is depleted — producing the interrupted diagonal banding seen on Oliva and certain Conus.</p>
 </div>
 
+<div id="panel">
+<div id="panel-head">Parameters</div>
 <div class="ctrl" id="ctrl-N">
   <span class="ctrl-name">Mantle Width</span>
   <span class="ctrl-val" id="v-N">150</span>
@@ -328,6 +329,7 @@
   <input type="range" id="s-RL" min="0" max="1.0" step="0.02" value="0.0">
   <span class="ctrl-tip">Phong specular highlight derived from the pigment gradient as a height map. Each stripe edge reads as a physical ridge — the rib structure of Conus and Oliva. At 0, the surface is matte.</span>
 </div>
+</div>
 
 <div id="reg-marks"><span></span><span></span><span></span><span></span></div>
 
@@ -351,7 +353,6 @@
   </label>
   <button id="btn-controls">controls</button>
   <span id="status"></span>
-  <button id="btn-reset-layout">reset layout</button>
   <button id="btn-save">save png</button>
 </div>
 
@@ -1418,97 +1419,9 @@ document.getElementById('btn-save').addEventListener('click',()=>{
 
 window.addEventListener('resize',()=>{_rawSimKey=''; render();});
 
-// ── DRAGGABLE CARDS ───────────────────────────────────────────────────────
-// 48px page margin, 20px gaps. Cards 330×130px. Model tabs at top:48, h:24.
-// Cards start at top: 48+24+20=92. Cols at: 48, 48+350=398, 48+700=748.
-const GRID_COL = [48, 298, 548];
-const GRID_ROW = [92, 203, 314, 425];
-const DEFAULT_POSITIONS = {
-  'ctrl-N':  {left:GRID_COL[0], top:GRID_ROW[0]},
-  'ctrl-ST': {left:GRID_COL[1], top:GRID_ROW[0]},
-  'ctrl-BL': {left:GRID_COL[2], top:GRID_ROW[0]},
-  'ctrl-RO': {left:GRID_COL[0], top:GRID_ROW[1]},
-  'ctrl-GR': {left:GRID_COL[1], top:GRID_ROW[1]},
-  'ctrl-PS': {left:GRID_COL[2], top:GRID_ROW[1]},
-  'ctrl-TU': {left:GRID_COL[0], top:GRID_ROW[2]},
-  'ctrl-DR': {left:GRID_COL[1], top:GRID_ROW[2]},
-  'ctrl-GA': {left:GRID_COL[2], top:GRID_ROW[2]},
-  'ctrl-TH': {left:GRID_COL[0], top:GRID_ROW[3]},
-  'ctrl-IR': {left:GRID_COL[1], top:GRID_ROW[3]},
-  'ctrl-RL': {left:GRID_COL[2], top:GRID_ROW[3]},
-};
-
-const LAYOUT_KEY = 'mantlecreep-layout-v10';
-let topZ = 10;
-
-function saveLayout(){
-  const out={};
-  document.querySelectorAll('.ctrl').forEach(c=>{
-    out[c.id]={left:c.style.left,top:c.style.top};
-  });
-  localStorage.setItem(LAYOUT_KEY,JSON.stringify(out));
-}
-
-function applyLayout(saved){
-  document.querySelectorAll('.ctrl').forEach(c=>{
-    const def=DEFAULT_POSITIONS[c.id];
-    if(saved&&saved[c.id]){
-      c.style.left=saved[c.id].left;
-      c.style.top=saved[c.id].top;
-    } else if(def){
-      c.style.left=def.left+'px';
-      c.style.top=def.top+'px';
-    }
-  });
-  // Position tooltip just below the card grid
-  requestAnimationFrame(()=>{
-    let maxBottom=0;
-    document.querySelectorAll('.ctrl').forEach(c=>{
-      const t=parseInt(c.style.top)||0;
-      maxBottom=Math.max(maxBottom,t+c.offsetHeight);
-    });
-    document.getElementById('tooltip-box').style.top=(maxBottom+6)+'px';
-  });
-}
-
-function resetLayout(){
-  localStorage.removeItem(LAYOUT_KEY);
-  applyLayout(null);
-}
-
-// Load saved or apply defaults
-applyLayout(JSON.parse(localStorage.getItem(LAYOUT_KEY)||'null'));
+// ── COMPACT PANEL ─────────────────────────────────────────────────────────
+// Fixed docked panel — no drag or layout persistence needed.
 applyAccent(PALETTES[paletteIdx]);
-
-// Wire drag on each card's label
-document.querySelectorAll('.ctrl').forEach(card=>{
-  const handle=card.querySelector('.ctrl-name');
-  let dragging=false,startX,startY,origL,origT;
-
-  handle.addEventListener('pointerdown',e=>{
-    dragging=true;
-    startX=e.clientX; startY=e.clientY;
-    origL=parseInt(card.style.left)||0;
-    origT=parseInt(card.style.top)||0;
-    card.style.zIndex=++topZ;
-    handle.setPointerCapture(e.pointerId);
-    e.preventDefault();
-  });
-
-  handle.addEventListener('pointermove',e=>{
-    if(!dragging) return;
-    // Clamp to viewport so cards can't escape off-screen
-    const w=window.innerWidth, h=window.innerHeight;
-    const newL=Math.max(0,Math.min(w-card.offsetWidth, origL+(e.clientX-startX)));
-    const newT=Math.max(0,Math.min(h-60, origT+(e.clientY-startY)));
-    card.style.left=newL+'px';
-    card.style.top =newT+'px';
-  });
-
-  handle.addEventListener('pointerup',()=>{ dragging=false; saveLayout(); });
-});
-
-document.getElementById('btn-reset-layout').addEventListener('click', resetLayout);
 
 // ── CONTROLS VISIBILITY ───────────────────────────────────────────────────
 // Controls are hidden on load so the canvas reads as a finished piece.
@@ -1519,7 +1432,6 @@ function syncControls(){
   document.body.classList.toggle('controls-hidden',!controlsVisible);
   btnControls.classList.toggle('active',controlsVisible);
   btnControls.textContent=controlsVisible?'hide controls':'controls';
-  document.getElementById('btn-reset-layout').style.display=controlsVisible?'':'none';
 }
 btnControls.addEventListener('click',()=>{controlsVisible=!controlsVisible;syncControls();});
 syncControls();

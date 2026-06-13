@@ -13,6 +13,14 @@ _Add new notes/requests here as bullets. They get processed into a version below
 
 ---
 
+## v0.6.1 — Compact control panel
+
+- [x] Redesigned controls from twelve large floating draggable cards (which covered the whole upper-left quadrant) into a single compact docked panel on the left edge (~206px wide), with a `Parameters` header and tight two-line rows (name + value, thin slider below).
+- [x] Removed the drag, layout-persistence, and reset-layout machinery (no longer needed); hover tooltips now appear beside the panel.
+- [x] Cleaned up dead `--card-*` CSS variables and the stale uiScale comment.
+
+---
+
 ## v0.6.0 — Art-first UI + preset quality pass
 
 Three highest-impact changes from a critical review, all verified in-browser.
