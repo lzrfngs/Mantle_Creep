@@ -77,6 +77,10 @@
   }
   .ctrl:hover { z-index:20; }
 
+  /* Controls hidden by default — the artwork is the hero. Toggle reveals them. */
+  body.controls-hidden .ctrl,
+  body.controls-hidden #tooltip-box { display:none !important; }
+
   /* Accent dot — hidden in new layout */
   .ctrl-num { display:none; }
 
@@ -226,7 +230,7 @@
   #info-box em { color:var(--accent); font-style:italic; }
 </style>
 </head>
-<body>
+<body class="controls-hidden">
 
 <div id="model-tabs">
   <button id="btn-sp51a" class="active">SP51A</button>
@@ -345,6 +349,7 @@
       <span class="toggle-thumb"></span>
     </div>
   </label>
+  <button id="btn-controls">controls</button>
   <span id="status"></span>
   <button id="btn-reset-layout">reset layout</button>
   <button id="btn-save">save png</button>
@@ -634,9 +639,10 @@ function initGL(){
       // Modulated by local luma: pigmented areas catch caustic light,
       // bare background barely does — matches subsurface light scattering.
       float localLuma=luma(col)+0.12;
-      // Always-on base shimmer at IR=0 (improves 3D at any slider setting).
-      // Amplified by Iridescence: both are wet optical effects.
-      float causticStr=0.18+uIrid*0.28;
+      // Caustic light is a wet-optical effect tied to the Iridescence slider only.
+      // At IR=0 there is no shimmer — the default render is clean pigment on shell,
+      // with no baked-in center glow.
+      float causticStr=uIrid*0.34;
       col+=caustic*causticStr*localLuma*vec3(1.0,0.96,0.86);
 
       // Fine gradient (2px) for iridescence irregularity
@@ -946,7 +952,7 @@ function simulate(IW, IH, params) {
       ke:24,
       Da:0.003, ra:0.1, ba:0.004, sa:0.05,
       Db:0.0,   rb:0.0, bb:0.02,
-      bbK1:65, bbK2:34, bbKT:390,  // wavelength, phase, original grid width
+      bbK1:26, bbK2:14, bbKT:390,  // wavelength, phase, original grid width
       s:0.1,
       // Init: activator at GA=1.0, substrate at GB=2.5 (both from .prm)
       initA_eq:1.0,  initA_noise:0.05,
@@ -1012,9 +1018,12 @@ function simulate(IW, IH, params) {
     bb_arr.fill(bb);
   }
 
-  // Row-by-row simulation: each canvas row = one time slice
+  // Row-by-row simulation: each canvas row = one time slice.
+  // Negative rows are a burn-in: the reaction runs forward before recording so
+  // the initial transient (a noisy band at the top edge) never reaches the canvas.
+  const burnIn = 80;
   const simRows = [];
-  for (let row = 0; row < IH; row++) {
+  for (let row = -burnIn; row < IH; row++) {
     for (let step = 0; step < stepCount; step++) {
       if (p.ke === 51) {
         stepKE51(act, st_b, st_c, s_arr, Da, ra, ba, sa, Db, rb, bb, sb, Dc, rc, sc, wrap, N, dA, dB, dC, nA, nB, nC);
@@ -1024,6 +1033,7 @@ function simulate(IW, IH, params) {
         stepKE54(act, st_b, st_c, s_arr, Da, ra, ba, Db, rb, bb, sb, Dc, rc, sc, wrap, N, dA, dB, dC, nA, nB, nC);
       }
     }
+    if (row < 0) continue; // burn-in row — advance the reaction but don't record
     let rowData = new Float32Array(N);
     for (let i = 0; i < N; i++) rowData[i] = act[i];
     if (BL > 0.3) rowData = blurRow(rowData, BL * 1.6);
@@ -1298,7 +1308,7 @@ function readParams(){
   return {
     PR: currentPreset,
     N:  g('N'),  ST: g('ST'),
-    BL: g('BL'), BO: g('RO'),
+    BL: g('BL'), BO: 0,
     TU: g('TU'), DR: g('DR'),
     GA: g('GA'), TH: g('TH'), GR: g('GR'), RO: g('RO'), PS: g('PS'),
     IR: g('IR'), RL: g('RL'),
@@ -1342,12 +1352,24 @@ document.addEventListener('visibilitychange',()=>{
 
 // Preset buttons
 const presetBtns = [document.getElementById('btn-sp51a'), document.getElementById('btn-sp512'), document.getElementById('btn-sp43')];
-const PRESET_STEPS = [100, 20, 1];
-// Per-preset render defaults: [TH, GA]
-// sp43: background activator is near-zero (bb leak only), spikes are 10-50×.
-// Low TH (0.1) clips the basal noise floor, GA=0.6 pushes mid-tones toward white
-// so only the actual wave-front spike renders as a clean dark line.
-const PRESET_RENDER = [[0.30, 1.4], [0.30, 1.4], [0.10, 0.6]];
+// Per-preset slider defaults. Each preset is tuned as a finished look so that
+// clicking a tab produces a polished, distinct pattern with no further fiddling.
+//   sp51a — open diamond lattice (unchanged, the strongest of the three).
+//   sp512 — dense organic ink-spot pigmentation: more cells, irregular substrate,
+//           soft persistence tails. (True teardrops need a seeding rework; this
+//           reads as authentic dotted-shell marking instead of sterile polka dots.)
+//   sp43  — rhythmic wave-termination banding: shorter substrate wavelength for
+//           more arches, drift for a diagonal lean, persistence to extend the tails.
+const PRESET_DEFAULTS = [
+  { N:150, ST:100, BL:0.50, PS:0.95, RO:0.00, TU:0.00, DR:0.00, GA:1.65, TH:0.46 },
+  { N:380, ST:20,  BL:0.45, PS:0.93, RO:0.12, TU:0.06, DR:0.00, GA:1.40, TH:0.30 },
+  { N:170, ST:3,   BL:0.70, PS:0.90, RO:0.00, TU:0.00, DR:0.12, GA:1.15, TH:0.05 },
+];
+
+function applyPresetDefaults(idx){
+  const d = PRESET_DEFAULTS[idx];
+  for (const k in d) snapSlider(k, d[k]);
+}
 
 function snapSlider(id, val){
   const sl=document.getElementById('s-'+id);
@@ -1361,11 +1383,7 @@ presetBtns.forEach((btn, idx) => {
     currentPreset = idx;
     presetBtns.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    // Sync steps slider to preset default
-    snapSlider('ST', PRESET_STEPS[idx]);
-    // Sync render sliders to per-preset defaults
-    snapSlider('TH', PRESET_RENDER[idx][0]);
-    snapSlider('GA', PRESET_RENDER[idx][1]);
+    applyPresetDefaults(idx);
     render();
   });
 });
@@ -1491,6 +1509,20 @@ document.querySelectorAll('.ctrl').forEach(card=>{
 });
 
 document.getElementById('btn-reset-layout').addEventListener('click', resetLayout);
+
+// ── CONTROLS VISIBILITY ───────────────────────────────────────────────────
+// Controls are hidden on load so the canvas reads as a finished piece.
+// The toggle reveals the draggable cards for fine-tuning.
+const btnControls=document.getElementById('btn-controls');
+let controlsVisible=false;
+function syncControls(){
+  document.body.classList.toggle('controls-hidden',!controlsVisible);
+  btnControls.classList.toggle('active',controlsVisible);
+  btnControls.textContent=controlsVisible?'hide controls':'controls';
+  document.getElementById('btn-reset-layout').style.display=controlsVisible?'':'none';
+}
+btnControls.addEventListener('click',()=>{controlsVisible=!controlsVisible;syncControls();});
+syncControls();
 
 // Accent dot injected into each card — picks up --rust palette colour
 const CTRL_ORDER = ['ctrl-N','ctrl-ST','ctrl-BL','ctrl-RO','ctrl-GR','ctrl-PS',
